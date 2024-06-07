@@ -11,4 +11,5 @@
  (modules Ppx_tmaa)
  (libraries ppxlib)
  (ppx_runtime_libraries ppx_tmaa.runtime)
+ (preprocess (pps ppxlib.metaquot))
 )
