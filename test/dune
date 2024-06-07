@@ -1,0 +1,13 @@
+(test
+ (name test_ppx_tmaa_runtime)
+ (libraries ppx_tmaa_runtime eio eio_main)
+ (modules Test_ppx_tmaa_runtime)
+ (preprocess (pps ppx_deriving.show))
+)
+
+(test
+ (name test_ppx_tmaa)
+ (preprocess (pps ppx_tmaa ppx_deriving.show))
+ (libraries eio)
+ (modules Test_ppx_tmaa)
+)
