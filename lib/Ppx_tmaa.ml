@@ -9,12 +9,18 @@ let suffix_lid modpath s =
 
 (** Apply {!Ppx_tmaa_runtime.Destiny.fill} *)
 let destiny_fill ~loc dest e =
-  let d = Ast.pexp_ident ~loc @@ Ast.Located.map_lident dest in
-  [%expr Ppx_tmaa_runtime.Destiny.fill [%e d] [%e e]]
+  [%expr Ppx_tmaa_runtime.Destiny.fill [%e dest] [%e e]]
 
 (** make a fresh destiny variable *)
-let mk_dest_variable loc =
-  Ast.Located.mk ~loc (gen_symbol ~prefix:"$dest" ())
+let fresh_dest loc = 
+  Ast.Located.mk ~loc (gen_symbol ~prefix:"dest" ())
+
+let with_new_dest expr f =
+  let loc = { expr.pexp_loc with loc_ghost = true } in
+  let dest = fresh_dest loc in
+  let dest_lid = Ast.(pexp_ident ~loc @@ Located.map_lident dest) in
+  let vb = Ast.(value_binding ~loc ~pat:(ppat_var ~loc dest) ~expr) in
+  Ast.(pexp_let ~loc Nonrecursive [vb] @@ f dest_lid)
 
 (** Transformation to destiny passing style.
 
@@ -31,8 +37,23 @@ let rewrite_dps modpath =
       let loc = e.pexp_loc in
       match e.pexp_desc with
       (* Context *)
-      | Pexp_constraint (_, _)
-      | Pexp_coerce (_, _, _)
+      | Pexp_constraint (body, ty) ->
+        let ty = [%type: [%t ty] Ppx_tmaa_runtime.Destiny.t] in
+        with_new_dest
+          { e with pexp_desc = Pexp_constraint (dest, ty) }
+          (fun dest' ->
+             self#expression dest' body)          
+      | Pexp_coerce (body, ty1, ty2) ->
+        let ty1 =
+          Option.map
+            (fun ty1 -> [%type: [%t ty1] Ppx_tmaa_runtime.Destiny.t])
+            ty1
+        in
+        let ty2 = [%type: [%t ty2] Ppx_tmaa_runtime.Destiny.t] in
+        with_new_dest
+          { e with pexp_desc = Pexp_coerce (dest, ty1, ty2) }
+          (fun dest' ->
+             self#expression dest' body)       
       | Pexp_tuple _
       | Pexp_construct (_, _)
       | Pexp_variant (_, _)
@@ -108,10 +129,10 @@ let rewrite_dps modpath =
       | Pexp_try (_, _)
       | Pexp_while (_, _)
       | Pexp_for (_, _, _, _, _)
+      | Pexp_assert _
         -> destiny_fill ~loc:e.pexp_loc dest e
 
       (* Others/Impossible to know *) 
-      | Pexp_assert _
       | Pexp_letop _
       | Pexp_extension _
       | Pexp_unreachable
@@ -160,9 +181,10 @@ let rec map_function_body f e = match e.pexp_desc with
 
 let dps_function_body o e =
   let loc = e.pexp_loc in
-  let dest = mk_dest_variable loc in
+  let dest = fresh_dest loc in
+  let dest_expr = Ast.(pexp_ident ~loc @@ Located.map_lident dest) in
   Ast.pexp_fun ~loc Nolabel None (Ast.ppat_var ~loc dest) @@
-  map_function_body (fun e -> o#expression dest e) e
+  map_function_body (fun e -> o#expression dest_expr e) e
 
 let dps_function_name =
   Ast.Located.map (fun orig -> orig ^ "$dps")
