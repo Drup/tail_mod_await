@@ -16,7 +16,7 @@ let rec map_dps ~sw d f t = match t with
     Fiber.fork ~sw (fun () -> map_dps ~sw d_left f t1);
     map_dps ~sw d_right f t2
 let map f t =
-  Eio.Switch.run @@ fun sw ->
+  Switch.run @@ fun sw ->
   let p, resolver = Promise.create () in
   let d = Destiny.create (Promise.resolve resolver) in
   Fiber.fork ~sw (fun () -> map_dps ~sw d f t);

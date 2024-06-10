@@ -1,9 +1,8 @@
 open Eio
 
 type 'a tree = N of 'a * 'a tree * 'a tree | L
-[@@deriving show { with_path = false }]
 
-let%async rec map f = function
+let%async rec map f t = match t with
   | L -> L
   | N (v , tl , tr ) ->
     let tl = map f tl and tr = map f tr in

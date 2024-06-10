@@ -11,3 +11,8 @@
  (libraries eio)
  (modules Test_ppx_tmaa)
 )
+
+(executable
+ (name pp)
+ (modules pp)
+ (libraries ppx_tmaa ppxlib))

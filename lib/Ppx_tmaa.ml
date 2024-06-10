@@ -19,7 +19,7 @@ let mk_dest_variable loc =
 (** Transformation to destiny passing style.
 
     Take as argument the module path pointing to a Promise module. *)
-let dps_transform modpath =
+let rewrite_dps modpath =
   let await_fun = suffix_lid modpath "await" in
   object (self)
     (* Context is the destiny of the computation *)
@@ -117,9 +117,30 @@ let dps_transform modpath =
       | Pexp_unreachable
         -> destiny_fill ~loc:e.pexp_loc dest e
   end
-  
-let dps_function_name =
-  Ast.Located.map (fun orig -> orig ^ "$dps")
+
+let rec wrap_function_args rev_arg_list f e = match e.pexp_desc with
+  | Pexp_newtype (_ty, body) ->
+    wrap_function_args rev_arg_list f body
+  | Pexp_fun (lbl, _opt, _pat, body) ->
+    let pat_loc = _pat.ppat_loc in
+    let name = gen_symbol ~prefix:"arg$" () in
+    let pat = Ast.ppat_var ~loc:pat_loc @@ Ast.Located.mk ~loc:pat_loc name in
+    let arg = Ast.pexp_ident ~loc:pat_loc @@ Ast.Located.lident ~loc:pat_loc name in
+    { e with pexp_desc =
+               Pexp_fun (lbl, None, pat,
+                         wrap_function_args ((lbl,arg)::rev_arg_list) f body) }
+  (* | Pexp_function cases -> *)
+  (*   let arg =  *)
+  (*   let cases = *)
+  (*     List.map *)
+  (*       (fun case -> {case with pc_rhs = map_function_body (n+1) f case.pc_rhs}) *)
+  (*       cases *)
+  (*   in *)
+  (*   { e with pexp_desc = Pexp_function cases } *)
+  | _ ->
+    (* Found the body *)
+    f (List.rev rev_arg_list) e
+let wrap_function_args = wrap_function_args []
 
 let rec map_function_body f e = match e.pexp_desc with
   | Pexp_newtype (ty, body) ->
@@ -137,26 +158,50 @@ let rec map_function_body f e = match e.pexp_desc with
     (* Found the body *)
     f e
 
-let dps_transformation
+let dps_function_body o e =
+  let loc = e.pexp_loc in
+  let dest = mk_dest_variable loc in
+  Ast.pexp_fun ~loc Nolabel None (Ast.ppat_var ~loc dest) @@
+  map_function_body (fun e -> o#expression dest e) e
+
+let dps_function_name =
+  Ast.Located.map (fun orig -> orig ^ "$dps")
+
+let entry_function_body dps_fun e =
+  wrap_function_args
+    (fun args body ->
+       let loc = body.pexp_loc in
+       let destiny = [%expr d] in
+       let dps_call = Ast.pexp_apply ~loc dps_fun ((Nolabel, destiny)::args) in
+       [%expr 
+         Eio.Switch.run @@ fun sw ->
+         let p, resolver = Eio.Promise.create () in
+         let d = Ppx_tmaa_runtime.Destiny.create (Eio.Promise.resolve resolver) in
+         Eio.Fiber.fork ~sw (fun () -> [%e dps_call]);
+         p
+       ]
+    )
+    e
+
+let rewrite_async_bindings
     ~(modpath : longident loc) ~loc (r : rec_flag) (l : value_binding list) =
-  let o = dps_transform modpath in
+  let o = rewrite_dps modpath in
   let f { pvb_pat; pvb_expr; pvb_attributes; pvb_loc } =
+    let dps_fun = 
+      let loc = pvb_pat.ppat_loc in
+      match pvb_pat.ppat_desc with
+      | Ppat_var name -> dps_function_name name
+      | _ -> Ast.Located.mk ~loc (gen_symbol ~prefix:"$dps" ())
+    in
     let vb =
-      let pvb_expr = pvb_expr (* TODO non dps wrapper *) in
+      let dps_fun_expr =
+        Ast.pexp_ident ~loc:pvb_loc @@ Ast.Located.map_lident dps_fun
+      in
+      let pvb_expr = entry_function_body dps_fun_expr pvb_expr in
       { pvb_pat ; pvb_attributes; pvb_loc; pvb_expr }
     and vb_dps =
-      let pvb_pat =
-        let loc = pvb_pat.ppat_loc in
-        Ast.ppat_var ~loc @@ match pvb_pat.ppat_desc with
-        | Ppat_var name -> dps_function_name name
-        | _ -> Ast.Located.mk ~loc (gen_symbol ~prefix:"$dps" ())
-      in
-      let loc = pvb_expr.pexp_loc in
-      let dest = mk_dest_variable loc in
-      let pvb_expr =
-        Ast.pexp_fun ~loc Nolabel None (Ast.ppat_var ~loc dest) @@
-        map_function_body (o#expression dest) pvb_expr
-      in
+      let pvb_pat = Ast.ppat_var ~loc:pvb_pat.ppat_loc dps_fun in
+      let pvb_expr = dps_function_body o pvb_expr in
       { pvb_pat ; pvb_attributes = []; pvb_loc; pvb_expr }
     in
     vb, vb_dps
@@ -181,12 +226,11 @@ let extracter =
 let expander ~ctxt ~arg bindings =
   let loc = Expansion_context.Extension.extension_point_loc ctxt in
   let modpath =
-    Option.value ~default:(Ast_builder.Default.Located.lident ~loc "Promise")
+    Option.value ~default:(Ast_builder.Default.Located.lident ~loc "Eio.Promise")
       arg
   in
   List.concat_map
-    (fun (loc, rec_flag, l) ->
-       dps_transformation ~modpath ~loc rec_flag l)
+    (fun (loc, rec_flag, l) -> rewrite_async_bindings ~modpath ~loc rec_flag l)
     bindings
 
 let ext = Extension.V3.declare_inline_with_path_arg
