@@ -10,66 +10,138 @@ let suffix_lid modpath s =
 (** Apply {!Ppx_tmaa_runtime.Destiny.fill} *)
 let destiny_fill ~loc dest e =
   [%expr Ppx_tmaa_runtime.Destiny.fill [%e dest] [%e e]]
+  
+(** Apply {!Ppx_tmaa_runtime.Destiny.hole} *)
+let destiny_hole ~loc hole =
+  [%expr Ppx_tmaa_runtime.Destiny.hole [%e hole]]
+
+let gen_var ~loc ~prefix () =
+  let symb = gen_symbol ~prefix () in
+  let e = Ast.pexp_ident ~loc @@ Ast.Located.lident ~loc symb in
+  let pat = Ast.ppat_var ~loc @@ Ast.Located.mk ~loc symb in
+  pat, e
 
 (** make a fresh destiny variable *)
 let fresh_dest loc = 
-  Ast.Located.mk ~loc (gen_symbol ~prefix:"dest" ())
+  gen_var ~loc ~prefix:"dest" ()
 
 let with_new_dest expr f =
   let loc = { expr.pexp_loc with loc_ghost = true } in
-  let dest = fresh_dest loc in
-  let dest_lid = Ast.(pexp_ident ~loc @@ Located.map_lident dest) in
-  let vb = Ast.(value_binding ~loc ~pat:(ppat_var ~loc dest) ~expr) in
-  Ast.(pexp_let ~loc Nonrecursive [vb] @@ f dest_lid)
+  let dest_pat, dest = fresh_dest loc in
+  let vb = Ast.(value_binding ~loc ~pat:dest_pat ~expr) in
+  Ast.(pexp_let ~loc Nonrecursive [vb] @@ f dest)
 
 (** Transformation to destiny passing style.
 
     Take as argument the module path pointing to a Promise module. *)
 let rewrite_dps modpath =
-  let await_fun = suffix_lid modpath "await" in
   object (self)
     (* Context is the destiny of the computation *)
     inherit [_] Ast_traverse.map_with_context as _super
 
-    (** Some functions from [Modpath] *)
+    method build_context ~loc dest l k = 
+      let rec walk_subexprs i refinements holes subexprs postexpr = function
+        | [] ->
+          List.rev refinements, List.rev holes,
+          List.rev subexprs, List.rev postexpr
+        | e :: t ->
+          let dest_pat, dest_expr = fresh_dest loc in
+          match self#cons_context dest_expr e with
+          | `Value e ->
+            walk_subexprs
+              (i+1) refinements holes (e::subexprs) postexpr t
+          | `Hole expr ->
+            let hole_pat, hole_expr = gen_var ~loc ~prefix:"hole" () in
+            let vb_hole =
+              let expr = [%expr Ppx_tmaa_runtime.Destiny.Field ([%e Ast.eint ~loc i], Obj)] in
+              Ast.value_binding ~loc ~pat:hole_pat ~expr
+            in
+            let refinements' = (dest_pat, hole_expr) :: refinements in
+            let holes' = vb_hole :: holes in
+            let subexpr = destiny_hole ~loc hole_expr in
+            walk_subexprs
+              (i+1) refinements' holes' (subexpr::subexprs) (expr::postexpr) t
+      in
+      let refinements, holes, subexprs, postexprs =
+        walk_subexprs 1 [] [] [] [] l
+      in
+      match holes with
+      | [] -> `Value (k subexprs)
+      | _ ->
+        let ctx_pat, ctx_expr = gen_var ~loc ~prefix:"v" () in
+        let value_binding =
+          let pat = ctx_pat and expr = k subexprs in
+          Ast.value_binding ~loc ~pat ~expr
+        in
+        let refinement_binding =
+          let destinies, holes = List.split refinements in
+          let pat = Ast.plist ~loc destinies
+          and expr =
+            [%expr Ppx_tmaa_runtime.Destiny.refine
+                [%e dest] [%e ctx_expr] [%e Ast.elist ~loc holes]]
+          in Ast.value_binding ~loc ~pat ~expr
+        in
+        let e =
+          Ast.pexp_let ~loc Nonrecursive holes @@
+          Ast.pexp_let ~loc Nonrecursive [value_binding] @@
+          Ast.pexp_let ~loc Nonrecursive [refinement_binding] @@
+          Ast.esequence ~loc postexprs
+        in
+        `Hole e
+    
+    method cons_context dest e =
+      let loc = e.pexp_loc in
+      match e.pexp_desc with
+      (* Tuple (e, ..., e) *)     
+      | Pexp_tuple l ->
+        let k l = { e with pexp_desc = Pexp_tuple l } in
+        self#build_context ~loc dest l k
+      (* Unitary Constructor K *)
+      | Pexp_construct (_, None) ->
+        `Value e
+      (* N-ary Constructor K (e, ... , e) *)
+      | Pexp_construct
+          (constructor, Some ({pexp_desc = Pexp_tuple l; _} as tup)) ->
+        let k l =
+          let tup = { tup with pexp_desc = Pexp_tuple l } in
+          { e with pexp_desc = Pexp_construct (constructor, Some tup) }
+        in
+        self#build_context ~loc dest l k
+      (* Constructor K e -- not a tuple *)
+      | Pexp_construct (constructor, Some e) ->
+        let k l = match l with
+          | [e] -> { e with pexp_desc = Pexp_construct (constructor, Some e) }
+          | _ -> assert false
+        in
+        self#build_context ~loc dest [e] k
+      | Pexp_variant (_, _)
+      | Pexp_record (_, _)
+      | Pexp_array _
+        (* TODO Actually handle the context *)
+        -> assert false
 
+      (* Await context *)
+      | Pexp_apply ({pexp_desc = Pexp_ident lid; _}, [Nolabel, _])
+        when lid.txt = Ldot (modpath.txt, "await") ->
+        `Hole (destiny_fill ~loc dest e)
+      | _ ->
+        `Value e
+    
     method! expression dest e =
       let loc = e.pexp_loc in
       match e.pexp_desc with
-      (* Context *)
-      | Pexp_constraint (body, ty) ->
-        let ty = [%type: [%t ty] Ppx_tmaa_runtime.Destiny.t] in
-        with_new_dest
-          { e with pexp_desc = Pexp_constraint (dest, ty) }
-          (fun dest' ->
-             self#expression dest' body)          
-      | Pexp_coerce (body, ty1, ty2) ->
-        let ty1 =
-          Option.map
-            (fun ty1 -> [%type: [%t ty1] Ppx_tmaa_runtime.Destiny.t])
-            ty1
-        in
-        let ty2 = [%type: [%t ty2] Ppx_tmaa_runtime.Destiny.t] in
-        with_new_dest
-          { e with pexp_desc = Pexp_coerce (dest, ty1, ty2) }
-          (fun dest' ->
-             self#expression dest' body)       
+      (* Context *)     
       | Pexp_tuple _
       | Pexp_construct (_, _)
       | Pexp_variant (_, _)
       | Pexp_record (_, _)
       | Pexp_array _
-        (* TODO Actually handle the context *)
-        -> destiny_fill ~loc:e.pexp_loc dest e
-
-      (* Await context *)
-      | Pexp_apply ({pexp_desc = Pexp_ident lid; _}, [Nolabel, e])
-        when lid.txt = Ldot (modpath.txt, "await") ->
-        (* TODO: Handle [await (f x)] *)
-        (* TODO: Lift expressions in await *)
-        (* TODO: Actually use chain *)
-        destiny_fill ~loc dest
-          [%expr [%e await_fun] [%e e]]      
+        ->
+        begin match self#cons_context dest e with
+          | `Value e ->
+            destiny_fill ~loc dest e
+          | `Hole e -> e
+        end
 
       (* Return position *)
       | Pexp_ident _
@@ -88,6 +160,25 @@ let rewrite_dps modpath =
       | Pexp_newtype (_, _)
       | Pexp_lazy _
         -> destiny_fill ~loc:e.pexp_loc dest e
+
+      (* Type annotations *)
+      | Pexp_constraint (body, ty) ->
+        let ty = [%type: [%t ty] Ppx_tmaa_runtime.Destiny.t] in
+        with_new_dest
+          { e with pexp_desc = Pexp_constraint (dest, ty) }
+          (fun dest' ->
+             self#expression dest' body)          
+      | Pexp_coerce (body, ty1, ty2) ->
+        let ty1 =
+          Option.map
+            (fun ty1 -> [%type: [%t ty1] Ppx_tmaa_runtime.Destiny.t])
+            ty1
+        in
+        let ty2 = [%type: [%t ty2] Ppx_tmaa_runtime.Destiny.t] in
+        with_new_dest
+          { e with pexp_desc = Pexp_coerce (dest, ty1, ty2) }
+          (fun dest' ->
+             self#expression dest' body)  
 
       (* Control construct, we can go down *)
       | Pexp_match (e, c) ->
@@ -181,9 +272,8 @@ let rec map_function_body f e = match e.pexp_desc with
 
 let dps_function_body o e =
   let loc = e.pexp_loc in
-  let dest = fresh_dest loc in
-  let dest_expr = Ast.(pexp_ident ~loc @@ Located.map_lident dest) in
-  Ast.pexp_fun ~loc Nolabel None (Ast.ppat_var ~loc dest) @@
+  let dest_pat, dest_expr = fresh_dest loc in
+  Ast.pexp_fun ~loc Nolabel None dest_pat @@
   map_function_body (fun e -> o#expression dest_expr e) e
 
 let dps_function_name =
