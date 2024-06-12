@@ -2,6 +2,8 @@ open Ppxlib
 
 module Ast = Ast_builder.Default
 
+module DpsFuns = Set.Make(String)
+
 (** Build the expresssion [Modpath.s] *)
 let suffix_lid modpath s =
   Ast.pexp_ident ~loc:modpath.loc @@
@@ -31,10 +33,13 @@ let with_new_dest expr f =
   let vb = Ast.(value_binding ~loc ~pat:dest_pat ~expr) in
   Ast.(pexp_let ~loc Nonrecursive [vb] @@ f dest)
 
+let dps_function_name =
+  Ast.Located.map (fun orig -> orig ^ "$dps")
+
 (** Transformation to destiny passing style.
 
     Take as argument the module path pointing to a Promise module. *)
-let rewrite_dps modpath =
+let rewrite_dps modpath dps_funs =
   object (self)
     (* Context is the destiny of the computation *)
     inherit [_] Ast_traverse.map_with_context as _super
@@ -120,7 +125,29 @@ let rewrite_dps modpath =
         (* TODO Actually handle the context *)
         -> assert false
 
-      (* Await context *)
+      (* [await (f x)] context *)
+      | Pexp_apply (
+          {pexp_desc = Pexp_ident lid; _},
+          [Nolabel,
+           ({pexp_desc=Pexp_apply ({pexp_desc=Pexp_ident funlid; _} as funname,
+                                   args); _}
+            as application)])
+        when lid.txt = Ldot (modpath.txt, "await")
+             && DpsFuns.mem (Longident.name funlid.txt) dps_funs
+        ->
+        let new_fun_lid =
+          Ast.Located.map_lident @@
+          dps_function_name @@ Ast.Located.map Longident.name funlid
+        in
+        let dps_application = 
+          {application with
+           pexp_desc =
+             Pexp_apply ({funname with pexp_desc=Pexp_ident new_fun_lid},
+                         (Nolabel,dest)::args)}
+        in
+        `Hole
+          [%expr Ppx_tmaa_runtime.Destiny.fork (fun () -> [%e dps_application])]
+      (* [await e] context *)
       | Pexp_apply ({pexp_desc = Pexp_ident lid; _}, [Nolabel, _])
         when lid.txt = Ldot (modpath.txt, "await") ->
         `Hole (destiny_fill ~loc dest e)
@@ -276,9 +303,6 @@ let dps_function_body o e =
   Ast.pexp_fun ~loc Nolabel None dest_pat @@
   map_function_body (fun e -> o#expression dest_expr e) e
 
-let dps_function_name =
-  Ast.Located.map (fun orig -> orig ^ "$dps")
-
 let entry_function_body dps_fun e =
   wrap_function_args
     (fun args body ->
@@ -295,16 +319,27 @@ let entry_function_body dps_fun e =
     )
     e
 
+(* Todo: Make a real error *)
+let get_vb_name vb =
+  match vb.pvb_pat.ppat_desc with
+  | Ppat_var name -> name
+  | _ -> failwith "Forbidden binding in a let%async"
+
 let rewrite_async_bindings
-    ~(modpath : longident loc) ~loc (r : rec_flag) (l : value_binding list) =
-  let o = rewrite_dps modpath in
-  let f { pvb_pat; pvb_expr; pvb_attributes; pvb_loc } =
-    let dps_fun = 
-      let loc = pvb_pat.ppat_loc in
-      match pvb_pat.ppat_desc with
-      | Ppat_var name -> dps_function_name name
-      | _ -> Ast.Located.mk ~loc (gen_symbol ~prefix:"$dps" ())
-    in
+    ~(modpath : longident loc) ~dps_funs ~loc
+    (r : rec_flag) (l : value_binding list) =
+  let dps_funs =
+    match r with
+    | Nonrecursive -> dps_funs
+    | Recursive -> List.fold_left (fun dps_funs vb ->
+        let name = get_vb_name vb in
+        DpsFuns.add name.txt dps_funs)
+        dps_funs
+        l        
+  in
+  let o = rewrite_dps modpath dps_funs in
+  let f ({ pvb_pat; pvb_expr; pvb_attributes; pvb_loc } as vb) =
+    let dps_fun = dps_function_name @@ get_vb_name vb in
     let vb =
       let dps_fun_expr =
         Ast.pexp_ident ~loc:pvb_loc @@ Ast.Located.map_lident dps_fun
@@ -342,7 +377,8 @@ let expander ~ctxt ~arg bindings =
       arg
   in
   List.concat_map
-    (fun (loc, rec_flag, l) -> rewrite_async_bindings ~modpath ~loc rec_flag l)
+    (fun (loc, rec_flag, l) ->
+       rewrite_async_bindings ~modpath ~dps_funs:DpsFuns.empty ~loc rec_flag l)
     bindings
 
 let ext = Extension.V3.declare_inline_with_path_arg
