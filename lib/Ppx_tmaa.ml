@@ -4,18 +4,17 @@ module Ast = Ast_builder.Default
 
 module DpsFuns = Set.Make(String)
 
-(** Build the expresssion [Modpath.s] *)
-let suffix_lid modpath s =
-  Ast.pexp_ident ~loc:modpath.loc @@
-  Ast.Located.map (fun lid -> Ldot (lid, s)) modpath
-
 (** Apply {!Ppx_tmaa_runtime.Destiny.fill} *)
-let destiny_fill ~loc dest e =
+let fill ~loc dest e =
   [%expr Ppx_tmaa_runtime.Destiny.fill [%e dest] [%e e]]
+
+(** {!Ppx_tmaa_runtime.Hole.Field} *)
+let field ~loc i = 
+  [%expr Ppx_tmaa_runtime.Hole.Field ([%e Ast.eint ~loc i], Obj)]
   
-(** Apply {!Ppx_tmaa_runtime.Destiny.hole} *)
-let destiny_hole ~loc hole =
-  [%expr Ppx_tmaa_runtime.Destiny.hole [%e hole]]
+(** Apply {!Ppx_tmaa_runtime.Hole.hole} *)
+let hole ~loc hole =
+  [%expr Ppx_tmaa_runtime.Hole.hole [%e hole]]
 
 let gen_var ~loc ~prefix () =
   let symb = gen_symbol ~prefix () in
@@ -58,17 +57,17 @@ let rewrite_dps modpath dps_funs =
           | `Hole expr ->
             let hole_pat, hole_expr = gen_var ~loc ~prefix:"hole" () in
             let vb_hole =
-              let expr = [%expr Ppx_tmaa_runtime.Destiny.Field ([%e Ast.eint ~loc i], Obj)] in
+              let expr = field ~loc i in
               Ast.value_binding ~loc ~pat:hole_pat ~expr
             in
             let refinements' = (dest_pat, hole_expr) :: refinements in
             let holes' = vb_hole :: holes in
-            let subexpr = destiny_hole ~loc hole_expr in
+            let subexpr = hole ~loc hole_expr in
             walk_subexprs
               (i+1) refinements' holes' (subexpr::subexprs) (expr::postexpr) t
       in
       let refinements, holes, subexprs, postexprs =
-        walk_subexprs 1 [] [] [] [] l
+        walk_subexprs 0 [] [] [] [] l
       in
       match holes with
       | [] -> `Value (k subexprs)
@@ -146,11 +145,11 @@ let rewrite_dps modpath dps_funs =
                          (Nolabel,dest)::args)}
         in
         `Hole
-          [%expr Ppx_tmaa_runtime.Destiny.fork (fun () -> [%e dps_application])]
+          [%expr Ppx_tmaa_runtime.AsyncFun.fork (fun () -> [%e dps_application])]
       (* [await e] context *)
       | Pexp_apply ({pexp_desc = Pexp_ident lid; _}, [Nolabel, _])
         when lid.txt = Ldot (modpath.txt, "await") ->
-        `Hole (destiny_fill ~loc dest e)
+        `Hole (fill ~loc dest e)
       | _ ->
         `Value e
     
@@ -166,7 +165,7 @@ let rewrite_dps modpath dps_funs =
         ->
         begin match self#cons_context dest e with
           | `Value e ->
-            destiny_fill ~loc dest e
+            fill ~loc dest e
           | `Hole e -> e
         end
 
@@ -186,7 +185,7 @@ let rewrite_dps modpath dps_funs =
       | Pexp_pack _
       | Pexp_newtype (_, _)
       | Pexp_lazy _
-        -> destiny_fill ~loc:e.pexp_loc dest e
+        -> fill ~loc:e.pexp_loc dest e
 
       (* Type annotations *)
       | Pexp_constraint (body, ty) ->
@@ -248,13 +247,13 @@ let rewrite_dps modpath dps_funs =
       | Pexp_while (_, _)
       | Pexp_for (_, _, _, _, _)
       | Pexp_assert _
-        -> destiny_fill ~loc:e.pexp_loc dest e
+        -> fill ~loc:e.pexp_loc dest e
 
       (* Others/Impossible to know *) 
       | Pexp_letop _
       | Pexp_extension _
       | Pexp_unreachable
-        -> destiny_fill ~loc:e.pexp_loc dest e
+        -> fill ~loc:e.pexp_loc dest e
   end
 
 let rec wrap_function_args rev_arg_list f e = match e.pexp_desc with
@@ -307,14 +306,13 @@ let entry_function_body dps_fun e =
   wrap_function_args
     (fun args body ->
        let loc = body.pexp_loc in
-       let destiny = [%expr d] in
-       let dps_call = Ast.pexp_apply ~loc dps_fun ((Nolabel, destiny)::args) in
        [%expr 
-         Eio.Switch.run @@ fun sw ->
-         let p, resolver = Eio.Promise.create () in
-         let d = Ppx_tmaa_runtime.Destiny.create (Eio.Promise.resolve resolver) in
-         Eio.Fiber.fork ~sw (fun () -> [%e dps_call]);
-         p
+         let d, c = Ppx_tmaa_runtime.Destiny.create () in
+         Ppx_tmaa_runtime.AsyncFun.fork
+           (fun () -> [%e
+             Ast.pexp_apply ~loc dps_fun ((Nolabel, [%expr d])::args)
+           ]);
+         c
        ]
     )
     e
@@ -373,7 +371,7 @@ let extracter =
 let expander ~ctxt ~arg bindings =
   let loc = Expansion_context.Extension.extension_point_loc ctxt in
   let modpath =
-    Option.value ~default:(Ast_builder.Default.Located.lident ~loc "Eio.Promise")
+    Option.value ~default:(Ast_builder.Default.Located.lident ~loc "Computation")
       arg
   in
   List.concat_map

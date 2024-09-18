@@ -2,6 +2,7 @@
  (public_name ppx_tmaa.runtime)
  (name ppx_tmaa_runtime)
  (modules Ppx_tmaa_runtime)
+ (libraries picos)
 )
 
 (library
@@ -10,6 +11,6 @@
  (name ppx_tmaa)
  (modules Ppx_tmaa)
  (libraries ppxlib)
- (ppx_runtime_libraries ppx_tmaa.runtime)
+ (ppx_runtime_libraries picos ppx_tmaa.runtime)
  (preprocess (pps ppxlib.metaquot))
 )

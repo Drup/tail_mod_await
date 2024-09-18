@@ -1,6 +1,6 @@
 (test
  (name test_ppx_tmaa_runtime)
- (libraries ppx_tmaa_runtime eio eio_main)
+ (libraries ppx_tmaa_runtime picos_mux.fifo)
  (modules Test_ppx_tmaa_runtime)
  (preprocess (pps ppx_deriving.show))
 )
@@ -8,7 +8,7 @@
 (test
  (name test_ppx_tmaa)
  (preprocess (pps ppx_tmaa ppx_deriving.show))
- (libraries eio)
+ (libraries picos_mux.fifo)
  (modules Test_ppx_tmaa)
 )
 
