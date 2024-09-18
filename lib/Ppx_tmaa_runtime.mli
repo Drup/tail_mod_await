@@ -40,6 +40,10 @@ module Destiny : sig
 
   (** [fill d v] is an alias for [refine d v []]. *)
   val fill : 'b t -> 'b -> unit
+
+  (** [forward d c] will fill the destiny [d] with the value of [c]
+      when it is finished. *)
+  val forward : 'a t -> 'a Picos.Computation.t -> unit
 end
 
 module AsyncFun : sig

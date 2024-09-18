@@ -78,26 +78,38 @@ module Destiny = struct
     let set v = Hole.set (Obj.repr root) path v in
     let d = Destiny { counter; resolve; set } in
     d, c
-  
-  let refine (type a) (Destiny d) v (hs : a Hole.list) : a list =
-    assert (Atomic.get d.counter >= 1);
-    d.set v;
+
+  let[@inline always] decr_and_check (Destiny d) = 
+    Atomic.decr d.counter;
+    if Atomic.compare_and_set d.counter 0 (-1) then
+      d.resolve ()
+
+  let refine (type a) (Destiny r as d) v (hs : a Hole.list) : a list =
+    assert (Atomic.get r.counter >= 1);
+    r.set v;
     match hs with
     | [] ->
-      Atomic.decr d.counter;
-      if Atomic.compare_and_set d.counter 0 (-1) then
-        d.resolve ();
+      decr_and_check d;
       []
     | _ -> 
       let holes = Hole.length hs in
-      let _ = Atomic.fetch_and_add d.counter (- 1 + holes) in
+      let _ = Atomic.fetch_and_add r.counter (- 1 + holes) in
       map_holes
         { f = fun hole ->
               let set x = Hole.set (Obj.repr v) hole x in
-              Destiny {d with set } }
+              Destiny {r with set} }
         hs
   let fill d v =
     let [] = refine d v [] in ()
+
+  let forward (Destiny r as d) (c : 'a Computation.t) =
+    (* TODO: This doesn't look terribly efficient. *)
+    let fiber = Fiber.create ~forbid:false c in
+    Fiber.spawn fiber (fun _ ->
+        let v = Computation.await c in
+        decr_and_check d;
+        r.set v
+      )
 end
 
 module AsyncFun = struct

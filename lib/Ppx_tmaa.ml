@@ -8,6 +8,10 @@ module DpsFuns = Set.Make(String)
 let fill ~loc dest e =
   [%expr Ppx_tmaa_runtime.Destiny.fill [%e dest] [%e e]]
 
+(** Apply {!Ppx_tmaa_runtime.Destiny.forward} *)
+let forward ~loc dest e =
+  [%expr Ppx_tmaa_runtime.Destiny.forward [%e dest] [%e e]]
+
 (** {!Ppx_tmaa_runtime.Hole.Field} *)
 let field ~loc i = 
   [%expr Ppx_tmaa_runtime.Hole.Field ([%e Ast.eint ~loc i], Obj)]
@@ -147,9 +151,9 @@ let rewrite_dps modpath dps_funs =
         `Hole
           [%expr Ppx_tmaa_runtime.AsyncFun.fork (fun () -> [%e dps_application])]
       (* [await e] context *)
-      | Pexp_apply ({pexp_desc = Pexp_ident lid; _}, [Nolabel, _])
+      | Pexp_apply ({pexp_desc = Pexp_ident lid; _}, [Nolabel, body])
         when lid.txt = Ldot (modpath.txt, "await") ->
-        `Hole (fill ~loc dest e)
+        `Hole (forward ~loc dest body)
       | _ ->
         `Value e
     
