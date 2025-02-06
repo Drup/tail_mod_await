@@ -59,9 +59,9 @@ type subterm =
       builds the target code.
   *)
   | Awaits of (expression -> expression)
-  (** The substerm is an immediate value (potentially with holes). *)
+  (** The subterm is an immediate value (potentially with holes). *)
   | Cons of expression
-  (** An arbitrary substerm. *)
+  (** An arbitrary subterm. *)
   | Expression of expression
 
 (** A [refiner] turns a constructor in terminal position into a call to refine.
@@ -77,6 +77,7 @@ class refiner modpath dps_funs = object (refiner)
   val mutable async_computations : expression list = []
   val mutable sync_computation : expression list = []
 
+  (** Top level call, assemble the call to {!Destiny.refine}. *)
   method refine dest e =
     let loc = {e.pexp_loc with loc_ghost = true} in
     let value = match refiner#rewrite_cons e with
@@ -94,7 +95,8 @@ class refiner modpath dps_funs = object (refiner)
     in
     Ast.pexp_let ~loc Nonrecursive [refine_binding] @@
     Ast.esequence ~loc (async_computations @ sync_computation)
-    
+
+  (** Rewrite the constructor expression [e]. *)
   method rewrite_cons e =
     let loc = e.pexp_loc in
     match e.pexp_desc with
@@ -132,8 +134,11 @@ class refiner modpath dps_funs = object (refiner)
     | _ ->
       Expression e
 
-  method allocate_cons ~loc l alloc_fun =
-    let subterms = List.map refiner#rewrite_cons l in
+  (** [allocate_cons ~loc subterms alloc_expr] rewrite the [substerms],
+      register the appropriate locations and destinies
+      and build the final using [alloc_expr]. *)
+  method allocate_cons ~loc subterms alloc_expr =
+    let subterms = List.map refiner#rewrite_cons subterms in
     let alloc_pat, alloc_var = gen_var ~loc ~prefix:"v" () in
     let allocation_binding =
       let subvalues =
@@ -141,7 +146,7 @@ class refiner modpath dps_funs = object (refiner)
           (function Cons e -> e | Expression _ | Awaits _ -> Loc.dummy ~loc)
           subterms
       in
-      let expr = alloc_fun subvalues in
+      let expr = alloc_expr subvalues in
       Ast.value_binding ~loc ~pat:alloc_pat ~expr
     in
     bindings <- allocation_binding :: bindings;
