@@ -6,6 +6,13 @@
 )
 
 (test
+ (name expect_ppx_tmaa)
+ (libraries ppxlib ppx_tmaa alcotest)
+ (preprocess (pps ppxlib.metaquot))
+ (modules Expect_ppx_tmaa)
+)
+
+(test
  (name test_ppx_tmaa)
  (preprocess (pps ppx_tmaa ppx_deriving.show))
  (libraries picos_mux.fifo)
