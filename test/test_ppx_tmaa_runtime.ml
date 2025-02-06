@@ -7,9 +7,9 @@ let rec map_dps d f t = match t with
   | L ->
     Destiny.fill d L
   | N (v, t1, t2) ->
-    let left : ('a tree) Hole.t = Field (1, Obj) in
-    let right : ('a tree) Hole.t = Field (2, Obj) in
-    let t : int tree = N (f v, Hole.hole left, Hole.hole right) in
+    let t : int tree = N (f v, Loc.dummy, Loc.dummy) in
+    let left : ('a tree) Loc.t = Loc.mk t 1 in
+    let right : ('a tree) Loc.t = Loc.mk t 2 in
     let [d_left; d_right] = Destiny.refine d t [ left ; right ] in
 
     AsyncFun.fork (fun () -> map_dps d_left f t1);
@@ -17,7 +17,7 @@ let rec map_dps d f t = match t with
     ()
 
 let map f t =
-  let d, c = Destiny.create () in
+  let d, c = Destiny.mk () in
   AsyncFun.fork (fun () -> map_dps d f t);
   c
   

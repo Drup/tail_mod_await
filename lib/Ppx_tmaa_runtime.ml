@@ -1,10 +1,11 @@
-open Picos
+module P = Picos
 
-module Hole = struct
+module Loc = struct
   
-  type 'h t =
-    | Obj : 'h t
-    | Field : int * 'h t -> 'h t
+  type 'h t = {
+    pointer : Obj.t ;
+    offset : int ;
+  }
 
   type 'a list =
     | [] : unit list
@@ -14,39 +15,29 @@ module Hole = struct
     | [] -> 0
     | _ :: t -> length t + 1
 
-  let hash (p : _ t) = Hashtbl.hash p
+  let mk block offset =
+    let pointer = Obj.repr block in
+    assert (Obj.is_block pointer);
+    {pointer; offset}
 
-  (** [hole p] gives the value to insert at position [p] to act like
-      a hole. *)
-  let hole p0 =
-    let rec aux : type a b . a t -> a = function
-      | Obj -> Obj.magic @@ ref (hash p0)
-      | Field (_i, a) -> aux a
-    in
-    aux p0
+  let dummy = Obj.magic @@ ref ()
+      
+  let is_uninitialized loc =
+    Obj.field loc.pointer loc.offset == dummy
 
-  let rec set_with_checksum
-    : type a . checksum:a -> Obj.t -> a t -> a -> unit
-    = fun ~checksum o p v ->
-      match p with
-      | Obj -> assert false
-      (* | Field (i, Double) -> *)
-      (*   assert (Obj.double_field o i = checksum); *)
-      (*   Obj.set_double_field o i v *)
-      (* | Field (i, Immediate) -> *)
-      (*   assert (Obj.field o i = Obj.repr checksum); *)
-      (*   Obj.set_field o i (Obj.repr v) *)
-      | Field (i, Obj) ->
-        assert (Obj.field o i = Obj.repr checksum);
-        Obj.set_field o i (Obj.repr v)
-      | Field (i, p) ->
-        let o' = Obj.field o i in set_with_checksum ~checksum o' p v
-
-  (** [set o p v] fills the hole at position [p] in [o] with [v].
-      Checks that the current content at [p] in [o] was never filled, and
-      is still a hole (built with {!hole}).
+  (** [set l v] fills the location [l] with [v].
+      It verifies that [l] was never filled.
   *)
-  let set o p v = set_with_checksum ~checksum:(hole p) o p v
+  let set
+    : type a . a t -> a -> unit
+    = fun loc v ->
+      assert (is_uninitialized loc);
+      let tag = Obj.tag loc.pointer in
+      if tag = Obj.double_array_tag then
+        Obj.set_double_field loc.pointer loc.offset (Obj.magic v)
+      else
+        Obj.set_field loc.pointer loc.offset (Obj.repr v)
+
 end
 
 module Destiny = struct
@@ -62,20 +53,19 @@ module Destiny = struct
     | [] : unit list
     | (::) : 'h t * 'h2 list -> ('h * 'h2) list
 
-  type f = { f : 'a . 'a Hole.t -> 'a t }
+  type f = { f : 'a . 'a Loc.t -> 'a t }
   let rec map_holes
-    : type a. f -> a Hole.list -> a list
+    : type a. f -> a Loc.list -> a list
     = fun f -> function
       | [] -> []
       | h :: t -> f.f h :: map_holes f t
   
-  let create () =
-    let c = Computation.create () in
+  let mk () =
+    let c = P.Computation.create () in
     let counter = Atomic.make 1 in
-    let path = Hole.Field (0, Obj) in
-    let root = ref (Hole.hole path) in
-    let resolve () = Computation.return c !root in
-    let set v = Hole.set (Obj.repr root) path v in
+    let root = ref (Obj.obj Loc.dummy) in
+    let resolve () = P.Computation.return c !root in
+    let set v = assert (!root == Obj.obj Loc.dummy); root := v in
     let d = Destiny { counter; resolve; set } in
     d, c
 
@@ -84,42 +74,44 @@ module Destiny = struct
     if Atomic.compare_and_set d.counter 0 (-1) then
       d.resolve ()
 
-  let refine (type a) (Destiny r as d) v (hs : a Hole.list) : a list =
+  let refine (type a) (Destiny r as d) v (hs : a Loc.list) : a list =
     assert (Atomic.get r.counter >= 1);
-    r.set v;
+    r.set (Sys.opaque_identity v);
     match hs with
     | [] ->
       decr_and_check d;
       []
     | _ -> 
-      let holes = Hole.length hs in
-      let _ = Atomic.fetch_and_add r.counter (- 1 + holes) in
+      let locs = Loc.length hs in
+      let _ = Atomic.fetch_and_add r.counter (- 1 + locs) in
       map_holes
-        { f = fun hole ->
-              let set x = Hole.set (Obj.repr v) hole x in
+        { f = fun loc ->
+              let set x = Loc.set loc x in
               Destiny {r with set} }
         hs
+
   let fill d v =
     let [] = refine d v [] in ()
 
-  let forward (Destiny r as d) (c : 'a Computation.t) =
+  let chain (c : 'a P.Computation.t) (Destiny r as d) =
     (* TODO: This doesn't look terribly efficient. *)
-    let fiber = Fiber.create ~forbid:false c in
-    Fiber.spawn fiber (fun _ ->
-        let v = Computation.await c in
+    let fiber = P.Fiber.create ~forbid:false c in
+    P.Fiber.spawn fiber (fun _ ->
+        let v = P.Computation.await c in
+        r.set v;
         decr_and_check d;
-        r.set v
+        ()
       )
 end
 
 module AsyncFun = struct
 
-  type t = Fiber.t
+  type t = P.Fiber.t
 
   let fork f =
-    let c = Computation.create () in
-    let fiber = Fiber.create ~forbid:false c in
-    Fiber.spawn fiber (fun _ -> f(); Computation.finish c)
+    let c = P.Computation.create () in
+    let fiber = P.Fiber.create ~forbid:false c in
+    P.Fiber.spawn fiber (fun _ -> f(); P.Computation.finish c)
 
 end
 
