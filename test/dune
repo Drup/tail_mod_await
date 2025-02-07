@@ -1,8 +1,8 @@
 (test
- (name test_ppx_tmaa_runtime)
- (libraries ppx_tmaa_runtime picos_mux.fifo)
- (modules Test_ppx_tmaa_runtime)
- (preprocess (pps ppx_deriving.show))
+ (name test_tree)
+ (libraries ppx_tmaa_runtime picos_mux.fifo alcotest)
+ (modules Test_tree)
+ (preprocess (pps ppx_tmaa ppx_deriving.show ppx_deriving.eq))
 )
 
 (test
@@ -10,13 +10,6 @@
  (libraries ppxlib ppx_tmaa alcotest)
  (preprocess (pps ppxlib.metaquot))
  (modules Expect_ppx_tmaa)
-)
-
-(test
- (name test_ppx_tmaa)
- (preprocess (pps ppx_tmaa ppx_deriving.show))
- (libraries picos_mux.fifo)
- (modules Test_ppx_tmaa)
 )
 
 (executable
