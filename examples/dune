@@ -8,6 +8,8 @@
 (executable
  (name no_stack)
  (preprocess (pps ppx_tmaa ppx_deriving.show))
- (libraries picos_mux.fifo mtime.clock)
+ (libraries picos_mux.fifo mtime.clock
+            ; memtrace
+ )
  (modules no_stack)
 )

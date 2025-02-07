@@ -1,3 +1,5 @@
+(* Memtrace.trace_if_requested ~context:"tmaa_no_stack" ();; *)
+
 open Picos
 
 let len = 50000000 
