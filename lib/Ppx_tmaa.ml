@@ -20,10 +20,10 @@ module Destiny = struct
     [%expr Ppx_tmaa_runtime.Destiny.refine
         [%e dest] [%e e] [%e Ast.elist ~loc locs]]
   
-  let fill ~loc dest e =
+  let fill ~loc ~dest e =
     [%expr Ppx_tmaa_runtime.Destiny.fill [%e dest] [%e e]]
 
-  let chain ~loc e dest =
+  let chain ~loc ~dest e =
     [%expr Ppx_tmaa_runtime.Destiny.chain [%e e] [%e dest]]
 end
 
@@ -32,6 +32,13 @@ let rec sequential_lets vbs body = match vbs with
   | vb :: t ->
     Ast.pexp_let ~loc:vb.pvb_loc Nonrecursive [vb] @@
     sequential_lets t body
+
+let symbol_id = ref 0
+let gen_symbol =
+  fun ?(prefix = "_x") () ->
+    symbol_id := !symbol_id + 1;
+    Printf.sprintf "%s__%03i_" prefix !symbol_id
+let reset_ids () = symbol_id := 0
 
 let gen_var ~loc ~prefix () =
   let symb = gen_symbol ~prefix () in
@@ -85,28 +92,50 @@ class refiner modpath dps_funs = object (refiner)
       | Awaits f -> f dest
       | Cons e -> e
     in
-    let refine_binding =
-      let pat = Ast.plist ~loc (List.rev destinies) in
-      let expr =
-        sequential_lets (List.rev bindings) @@
-        Destiny.refine ~loc ~dest ~e:value ~locs:(List.rev locations)
+    assert (List.length locations = List.length destinies);
+    if List.is_empty locations then
+      sequential_lets (List.rev bindings) @@
+      Ast.esequence ~loc (
+        Destiny.fill ~loc ~dest value ::
+        async_computations @
+        sync_computation)
+    else
+      let refine_binding =
+        let pat = Ast.plist ~loc (List.rev destinies) in
+        let expr =
+          sequential_lets (List.rev bindings) @@
+          Destiny.refine ~loc ~dest ~e:value ~locs:(List.rev locations)
+        in
+        Ast.value_binding ~loc ~pat ~expr
       in
-      Ast.value_binding ~loc ~pat ~expr
-    in
-    Ast.pexp_let ~loc Nonrecursive [refine_binding] @@
-    Ast.esequence ~loc (async_computations @ sync_computation)
+      Ast.pexp_let ~loc Nonrecursive [refine_binding] @@
+      Ast.esequence ~loc (async_computations @ sync_computation)
 
   (** Rewrite the constructor expression [e]. *)
   method rewrite_cons e =
     let loc = e.pexp_loc in
     match e.pexp_desc with
+    (* Constants and Unitary Constructor K or `K *)
+    | Pexp_constant _
+    | Pexp_construct (_, None) | Pexp_variant (_, None) ->
+      Cons e
     (* Tuple (e, ..., e) *)     
     | Pexp_tuple l ->
       let alloc l = { e with pexp_desc = Pexp_tuple l } in
       refiner#allocate_cons ~loc l alloc
-    (* Unitary Constructor K *)
-    | Pexp_construct (_, None) ->
-      Cons e
+    (* Records {e with n = e; n = e; ...} *)
+    | Pexp_record (fields, with_) ->
+      (* TODO Check if we can/should do something in the with_ part *)
+      let names, subterms = List.split fields in
+      let alloc vs =
+        let fields = List.map2 (fun x y -> x,y) names vs in
+        { e with pexp_desc = Pexp_record (fields, with_) }
+      in
+      refiner#allocate_cons ~loc subterms alloc
+    (* Array [|e, ..., e|] *)
+    | Pexp_array l ->
+      let alloc l = { e with pexp_desc = Pexp_array l } in
+      refiner#allocate_cons ~loc l alloc
     (* N-ary Constructor K (e, ... , e) *)
     | Pexp_construct
         (constructor, Some ({pexp_desc = Pexp_tuple l; _} as tup)) ->
@@ -122,11 +151,12 @@ class refiner modpath dps_funs = object (refiner)
         | _ -> assert false
       in
       refiner#allocate_cons ~loc [e] alloc
-    | Pexp_variant (_, _)
-    | Pexp_record (_, _)
-    | Pexp_array _
-      (* TODO Actually handle the context *)
-      -> assert false
+    | Pexp_variant (constructor, Some e) -> 
+      let alloc l = match l with
+        | [e] -> { e with pexp_desc = Pexp_variant (constructor, Some e) }
+        | _ -> assert false
+      in
+      refiner#allocate_cons ~loc ~shift:1 [e] alloc
     (* [await e] context *)
     | Pexp_apply (
         {pexp_desc = Pexp_ident {txt = Ldot (p, "await"); _} ; _},
@@ -149,7 +179,7 @@ class refiner modpath dps_funs = object (refiner)
   (** [allocate_cons ~loc subterms alloc_expr] rewrite the [substerms],
       register the appropriate locations and destinies
       and build the final using [alloc_expr]. *)
-  method allocate_cons ~loc subterms alloc_expr =
+  method allocate_cons ~loc ?(shift=0) subterms alloc_expr =
     let subterms = List.map refiner#rewrite_cons subterms in
     let alloc_pat, alloc_var = gen_var ~loc ~prefix:"v" () in
     let allocation_binding =
@@ -167,14 +197,14 @@ class refiner modpath dps_funs = object (refiner)
           ()
         | Expression computation ->
           let dest_pat, dest_var = fresh_dest loc in
-          locations <- Loc.mk ~loc alloc_var i :: locations;
+          locations <- Loc.mk ~loc alloc_var (shift+i) :: locations;
           destinies <- dest_pat :: destinies;
-          let e = Destiny.fill ~loc dest_var computation in
+          let e = Destiny.fill ~loc ~dest:dest_var computation in
           sync_computation <- e :: sync_computation;
           ()
         | Awaits f ->
           let dest_pat, dest_var = fresh_dest loc in
-          locations <- Loc.mk ~loc alloc_var i :: locations;
+          locations <- Loc.mk ~loc alloc_var (shift+i) :: locations;
           destinies <- dest_pat :: destinies;
           let e = f dest_var in
           async_computations <- e :: async_computations;
@@ -203,7 +233,7 @@ class refiner modpath dps_funs = object (refiner)
       [%expr Ppx_tmaa_runtime.AsyncFun.fork (fun () -> [%e dps_application])]
     (* [await e] context *)
     | _ ->
-      Destiny.chain ~loc e dest
+      Destiny.chain ~loc e ~dest
 end
 
 (** Transformation to destiny passing style.
@@ -240,7 +270,7 @@ let rewrite_dps modpath dps_funs =
       | Pexp_pack _
       | Pexp_newtype (_, _)
       | Pexp_lazy _
-        -> Destiny.fill ~loc:e.pexp_loc dest e
+        -> Destiny.fill ~loc:e.pexp_loc ~dest e
 
       (* Type annotations *)
       | Pexp_constraint (body, ty) ->
@@ -302,13 +332,13 @@ let rewrite_dps modpath dps_funs =
       | Pexp_while (_, _)
       | Pexp_for (_, _, _, _, _)
       | Pexp_assert _
-        -> Destiny.fill ~loc:e.pexp_loc dest e
+        -> Destiny.fill ~loc:e.pexp_loc ~dest e
 
       (* Others/Impossible to know *) 
       | Pexp_letop _
       | Pexp_extension _
       | Pexp_unreachable
-        -> Destiny.fill ~loc:e.pexp_loc dest e
+        -> Destiny.fill ~loc:e.pexp_loc ~dest e
   end
 
 let rec wrap_function_args rev_arg_list f e = match e.pexp_desc with
