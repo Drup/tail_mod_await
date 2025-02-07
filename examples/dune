@@ -4,3 +4,10 @@
  (libraries picos_mux.fifo)
  (modules tree_map)
 )
+
+(executable
+ (name no_stack)
+ (preprocess (pps ppx_tmaa ppx_deriving.show))
+ (libraries picos_mux.fifo mtime.clock)
+ (modules no_stack)
+)
