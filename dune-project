@@ -4,23 +4,17 @@
 
 (generate_opam_files true)
 
-(source
- (github username/reponame))
-
-(authors "Author Name")
-
-(maintainers "Maintainer Name")
-
-(license LICENSE)
-
-(documentation https://url/to/documentation)
+(source (github Drup/tail_mod_await))
+(authors "Gabriel Radanne")
+(maintainers "Gabriel Radanne")
+(license MIT)
 
 (package
  (name ppx_tmaa)
- (synopsis "A short synopsis")
- (description "A longer description")
- (depends ocaml dune)
- (tags
-  (topics "to describe" your project)))
-
-; See the complete stanza docs at https://dune.readthedocs.io/en/stable/dune-files.html#dune-project
+ (synopsis "A ppx implementing the tail mod Async/Await transformation")
+ (depends
+  (ocaml (>= 5.0))
+   dune picos ppxlib
+  (picos_mux (= :with-test))
+  (alcotest (= :with-test))
+))
