@@ -128,9 +128,21 @@ class refiner modpath dps_funs = object (refiner)
       (* TODO Actually handle the context *)
       -> assert false
     (* [await e] context *)
-    | Pexp_apply ({pexp_desc = Pexp_ident lid; _}, [Nolabel, body])
-      when lid.txt = Ldot (modpath.txt, "await") ->
-      Awaits (refiner#rewrite_await body)
+    | Pexp_apply (
+        {pexp_desc = Pexp_ident {txt = Ldot (p, "await"); _} ; _},
+        [Nolabel, body]
+      )
+      ->
+      if p = modpath then
+        Awaits (refiner#rewrite_await body)
+      else
+        let s = Format.asprintf
+            "This await is not in the right module.@.The module '%a' is expected but '%a' was provided.@.@.Either change namespace using the '%%YourModule.async' attribute@ or let-bind the await call before the return."
+            Pprintast.longident modpath
+            Pprintast.longident p
+        in
+        let attr = attribute_of_warning e.pexp_loc s in
+        Expression (Ast_helper.Exp.attr e attr)
     | _ ->
       Expression e
 
@@ -367,7 +379,7 @@ let get_vb_name vb =
   | _ -> failwith "Forbidden binding in a let%async"
 
 let rewrite_async_bindings
-    ~(modpath : longident loc) ~dps_funs ~loc
+    ~(modpath : longident) ~dps_funs ~loc
     (r : rec_flag) (l : value_binding list) =
   let dps_funs =
     match r with
@@ -411,11 +423,11 @@ let context = Extension.Context.structure_item
 let extracter =
   Ast_pattern.(pstr @@ many @@ pack3 @@ pstr_loc __ @@ pstr_value __ __)
 
-let expander ~ctxt ~arg bindings =
-  let loc = Expansion_context.Extension.extension_point_loc ctxt in
+let expander ~ctxt:_ ~arg bindings =
   let modpath =
-    Option.value ~default:(Ast_builder.Default.Located.lident ~loc "Computation")
-      arg
+    arg
+    |> Option.map (fun {txt;_} -> txt)
+    |> Option.value ~default:(lident "Computation")
   in
   List.concat_map
     (fun (loc, rec_flag, l) ->

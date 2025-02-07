@@ -19,7 +19,7 @@ let expr_testable =
 
 (* Rewrite an expressions in DPS using the destination "dest". *)
 let rewrite_expr e =
-  let modname = Loc.make ~loc (Longident.Lident "Async") in
+  let modname = lident "Async" in
   let dps_funs = Ppx_tmaa.DpsFuns.empty in
   let dest = Ast.evar ~loc "dest" in
   (Ppx_tmaa.rewrite_dps modname dps_funs)#expression dest e
