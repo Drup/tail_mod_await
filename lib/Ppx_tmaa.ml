@@ -2,7 +2,7 @@ open Ppxlib
 
 module Ast = Ast_builder.Default
 
-module DpsFuns = Set.Make(String)
+module DpsFuns = Map.Make(String)
 
 (** Reified module {!Ppx_tmaa_runtime.Loc}. *)
 module Loc = struct
@@ -19,7 +19,7 @@ module Destiny = struct
   let refine ~loc ~dest ~e ~locs =
     [%expr Ppx_tmaa_runtime.Destiny.refine
         [%e dest] [%e e] [%e Ast.elist ~loc locs]]
-  
+
   let fill ~loc ~dest e =
     [%expr Ppx_tmaa_runtime.Destiny.fill [%e dest] [%e e]]
 
@@ -36,8 +36,8 @@ let rec sequential_lets vbs body = match vbs with
 let symbol_id = ref 0
 let gen_symbol =
   fun ?(prefix = "_x") () ->
-    symbol_id := !symbol_id + 1;
-    Printf.sprintf "%s__%03i_" prefix !symbol_id
+  symbol_id := !symbol_id + 1;
+  Printf.sprintf "%s__%03i_" prefix !symbol_id
 let reset_ids () = symbol_id := 0
 
 let gen_var ~loc ~prefix () =
@@ -45,7 +45,7 @@ let gen_var ~loc ~prefix () =
   let e = Ast.evar ~loc symb in
   let pat = Ast.pvar ~loc symb in
   pat, e
-  
+
 (** make a fresh destiny variable *)
 let fresh_dest loc = 
   gen_var ~loc ~prefix:"dest" ()
@@ -70,6 +70,14 @@ type subterm =
   | Cons of expression
   (** An arbitrary subterm. *)
   | Expression of expression
+
+(** Apply a purely syntactical wrapper over a subterm.
+
+    Allow to easily handle constructs such as [Cons (let open X in e)].
+*)
+let map_subterm_if_awaits e0 f sub = match sub with
+  | Expression _ | Cons _ -> Expression e0
+  | Awaits mke -> Awaits (Fun.compose f mke)
 
 (** A [refiner] turns a constructor in terminal position into a call to refine.
 
@@ -112,16 +120,16 @@ class refiner modpath dps_funs = object (refiner)
       Ast.esequence ~loc (async_computations @ sync_computation)
 
   (** Rewrite the constructor expression [e]. *)
-  method rewrite_cons e =
-    let loc = e.pexp_loc in
-    match e.pexp_desc with
+  method rewrite_cons e0 =
+    let loc = e0.pexp_loc in
+    match e0.pexp_desc with
     (* Constants and Unitary Constructor K or `K *)
     | Pexp_constant _
     | Pexp_construct (_, None) | Pexp_variant (_, None) ->
-      Cons e
+      Cons e0
     (* Tuple (e, ..., e) *)     
     | Pexp_tuple l ->
-      let alloc l = { e with pexp_desc = Pexp_tuple l } in
+      let alloc l = { e0 with pexp_desc = Pexp_tuple l } in
       refiner#allocate_cons ~loc l alloc
     (* Records {e with n = e; n = e; ...} *)
     | Pexp_record (fields, with_) ->
@@ -129,19 +137,19 @@ class refiner modpath dps_funs = object (refiner)
       let names, subterms = List.split fields in
       let alloc vs =
         let fields = List.map2 (fun x y -> x,y) names vs in
-        { e with pexp_desc = Pexp_record (fields, with_) }
+        { e0 with pexp_desc = Pexp_record (fields, with_) }
       in
       refiner#allocate_cons ~loc subterms alloc
     (* Array [|e, ..., e|] *)
     | Pexp_array l ->
-      let alloc l = { e with pexp_desc = Pexp_array l } in
+      let alloc l = { e0 with pexp_desc = Pexp_array l } in
       refiner#allocate_cons ~loc l alloc
     (* N-ary Constructor K (e, ... , e) *)
     | Pexp_construct
         (constructor, Some ({pexp_desc = Pexp_tuple l; _} as tup)) ->
       let alloc l =
         let tup = { tup with pexp_desc = Pexp_tuple l } in
-        { e with pexp_desc = Pexp_construct (constructor, Some tup) }
+        { e0 with pexp_desc = Pexp_construct (constructor, Some tup) }
       in
       refiner#allocate_cons ~loc l alloc
     (* Constructor K e -- not a tuple *)
@@ -162,19 +170,61 @@ class refiner modpath dps_funs = object (refiner)
         {pexp_desc = Pexp_ident {txt = Ldot (p, "await"); _} ; _},
         [Nolabel, body]
       )
+    (* [await @@ e] context *)
+    | Pexp_apply (
+        {pexp_desc = Pexp_ident {txt = Lident "@@"; _} ; _},
+        [Nolabel, {pexp_desc = Pexp_ident {txt = Ldot (p, "await"); _} ; _};
+         Nolabel, body
+        ]
+      )
       ->
       if p = modpath then
-        Awaits (refiner#rewrite_await body)
+        Awaits (fun dest -> refiner#rewrite_await dest body)
       else
         let s = Format.asprintf
             "This await is not in the right module.@.The module '%a' is expected but '%a' was provided.@.@.Either change namespace using the '%%YourModule.async' attribute@ or let-bind the await call before the return."
             Pprintast.longident modpath
             Pprintast.longident p
         in
-        let attr = attribute_of_warning e.pexp_loc s in
-        Expression (Ast_helper.Exp.attr e attr)
+        let attr = attribute_of_warning e0.pexp_loc s in
+        Expression (Ast_helper.Exp.attr e0 attr)
+    (* Branching control structures *)
+    | Pexp_ifthenelse (b, then_, None) ->
+      map_subterm_if_awaits e0
+        (fun e -> Ast.pexp_ifthenelse ~loc b e None)
+        (refiner#rewrite_cons then_)
+    | Pexp_ifthenelse (b, then_, Some else_) ->
+      begin match refiner#rewrite_cons then_, refiner#rewrite_cons else_ with
+        | Awaits mkthen_, Awaits mkelse_ ->
+          Awaits (fun dest ->
+              Ast.pexp_ifthenelse ~loc
+                b (mkthen_ dest) (Some (mkelse_ dest))
+            )
+        | _ -> Expression e0
+      end
+    (* Linear control structures. *)
+    | Pexp_let (s, e1, e2) ->
+      map_subterm_if_awaits e0
+        (fun e -> Ast_helper.Exp.let_ ~loc s e1 e)
+        (refiner#rewrite_cons e2)
+    | Pexp_letmodule (s, m, e) ->
+      map_subterm_if_awaits e0
+        (fun e -> Ast.pexp_letmodule ~loc s m e)
+        (refiner#rewrite_cons e)
+    | Pexp_letexception (ec, e) ->
+      map_subterm_if_awaits e0
+        (fun e -> Ast.pexp_letexception ~loc ec e)
+        (refiner#rewrite_cons e)
+    | Pexp_open (o, e) ->
+      map_subterm_if_awaits e0
+        (fun e -> Ast.pexp_open ~loc o e)
+        (refiner#rewrite_cons e)
+    | Pexp_poly (e, ty) ->
+      map_subterm_if_awaits e0
+        (fun e -> Ast.pexp_poly ~loc e ty)
+        (refiner#rewrite_cons e)
     | _ ->
-      Expression e
+      Expression e0
 
   (** [allocate_cons ~loc subterms alloc_expr] rewrite the [substerms],
       register the appropriate locations and destinies
@@ -211,18 +261,44 @@ class refiner modpath dps_funs = object (refiner)
           ()
       ) subterms;
     Cons alloc_var
-  
+
   (* [rewrite_await dest e] rewrite [e] when placed inside an await. *)
-  method rewrite_await e dest =
+  method rewrite_await dest e =
     let loc = e.pexp_loc in
     match e.pexp_desc with
+    (* Branching control structures *)
+    | Pexp_ifthenelse (b, then_, else_) ->
+      Ast.pexp_ifthenelse ~loc b
+        (refiner#rewrite_await dest then_)
+        (Option.map (refiner#rewrite_await dest) else_)
+    | Pexp_match (matchee, cases) ->
+      let cases =
+        List.map (fun case ->
+            { case with pc_rhs = refiner#rewrite_await dest case.pc_rhs }
+          ) cases
+      in
+      Ast.pexp_match ~loc matchee cases
+    (* Linear control structures. *)
+    | Pexp_let (s, e1, e2) ->
+      Ast.pexp_let ~loc s e1 (refiner#rewrite_await dest e2)
+    | Pexp_letmodule (s, m, e) ->
+      Ast.pexp_letmodule ~loc s m
+        (refiner#rewrite_await dest e)
+    | Pexp_letexception (ec, e) ->
+      Ast.pexp_letexception ~loc ec
+        (refiner#rewrite_await dest e)
+    | Pexp_open (o, e) ->
+      Ast.pexp_open ~loc o
+        (refiner#rewrite_await dest e)
+    | Pexp_poly (e, ty) ->
+      Ast.pexp_poly ~loc (refiner#rewrite_await dest e) ty
     (* [await (f x)] context *)
     | Pexp_apply ({pexp_desc=Pexp_ident funlid; _} as funname, args)
       when DpsFuns.mem (Longident.name funlid.txt) dps_funs
       ->
       let new_fun_lid =
         Ast.Located.map_lident @@
-        dps_function_name @@ Ast.Located.map Longident.name funlid
+        DpsFuns.find (Longident.name funlid.txt) dps_funs
       in
       let dps_application = 
         {e with
@@ -244,16 +320,16 @@ let rewrite_dps modpath dps_funs =
     (* Context is the destiny of the computation *)
     inherit [_] Ast_traverse.map_with_context as _super
 
-    method! expression dest e =
-      let loc = e.pexp_loc in
-      match e.pexp_desc with
+    method! expression dest e0 =
+      let loc = e0.pexp_loc in
+      match e0.pexp_desc with
       (* Constructor *)     
       | Pexp_tuple _
       | Pexp_construct (_, _)
       | Pexp_variant (_, _)
       | Pexp_record (_, _)
       | Pexp_array _
-        -> (new refiner modpath dps_funs)#refine dest e
+        -> (new refiner modpath dps_funs)#refine dest e0
       (* Return position *)
       | Pexp_ident _
       | Pexp_constant _
@@ -270,13 +346,13 @@ let rewrite_dps modpath dps_funs =
       | Pexp_pack _
       | Pexp_newtype (_, _)
       | Pexp_lazy _
-        -> Destiny.fill ~loc:e.pexp_loc ~dest e
+        -> Destiny.fill ~loc:e0.pexp_loc ~dest e0
 
       (* Type annotations *)
       | Pexp_constraint (body, ty) ->
         let ty = [%type: [%t ty] Ppx_tmaa_runtime.Destiny.t] in
         with_new_dest
-          { e with pexp_desc = Pexp_constraint (dest, ty) }
+          { e0 with pexp_desc = Pexp_constraint (dest, ty) }
           (fun dest' ->
              self#expression dest' body)          
       | Pexp_coerce (body, ty1, ty2) ->
@@ -287,43 +363,43 @@ let rewrite_dps modpath dps_funs =
         in
         let ty2 = [%type: [%t ty2] Ppx_tmaa_runtime.Destiny.t] in
         with_new_dest
-          { e with pexp_desc = Pexp_coerce (dest, ty1, ty2) }
+          { e0 with pexp_desc = Pexp_coerce (dest, ty1, ty2) }
           (fun dest' ->
              self#expression dest' body)  
 
       (* Control construct, we can go down *)
       | Pexp_match (e, c) ->
-        { e with
+        { e0 with
           pexp_desc = Pexp_match (e, self#cases dest c)
         }
       | Pexp_ifthenelse (i, then_, else_) ->
-        { e with
+        { e0 with
           pexp_desc =
             Pexp_ifthenelse (i, self#expression dest then_,
                              Option.map (self#expression dest) else_)
         }
       | Pexp_let (s, e1, e2) ->
-        { e with
+        { e0 with
           pexp_desc = Pexp_let (s, e1, self#expression dest e2)
         }
       | Pexp_letmodule (s, m, e) ->
-        { e with
+        { e0 with
           pexp_desc = Pexp_letmodule (s, m, self#expression dest e)
         }
       | Pexp_letexception (ec, e) ->
-        { e with
+        { e0 with
           pexp_desc = Pexp_letexception (ec, self#expression dest e)
         }
       | Pexp_open (o, e) ->
-        { e with
+        { e0 with
           pexp_desc = Pexp_open (o, self#expression dest e)
         }
       | Pexp_sequence (e1, e2) ->
-        { e with
+        { e0 with
           pexp_desc = Pexp_sequence (e1, self#expression dest e2)
         }
       | Pexp_poly (e, ty) ->
-        { e with
+        { e0 with
           pexp_desc = Pexp_poly (self#expression dest e, ty)
         }
 
@@ -332,13 +408,13 @@ let rewrite_dps modpath dps_funs =
       | Pexp_while (_, _)
       | Pexp_for (_, _, _, _, _)
       | Pexp_assert _
-        -> Destiny.fill ~loc:e.pexp_loc ~dest e
+        -> Destiny.fill ~loc:e0.pexp_loc ~dest e0
 
       (* Others/Impossible to know *) 
       | Pexp_letop _
       | Pexp_extension _
       | Pexp_unreachable
-        -> Destiny.fill ~loc:e.pexp_loc ~dest e
+        -> Destiny.fill ~loc:e0.pexp_loc ~dest e0
   end
 
 let rec wrap_function_args rev_arg_list f e = match e.pexp_desc with
@@ -416,13 +492,14 @@ let rewrite_async_bindings
     | Nonrecursive -> dps_funs
     | Recursive -> List.fold_left (fun dps_funs vb ->
         let name = get_vb_name vb in
-        DpsFuns.add name.txt dps_funs)
+        let dps_name = dps_function_name name in
+        DpsFuns.add name.txt dps_name dps_funs)
         dps_funs
         l        
   in
   let o = rewrite_dps modpath dps_funs in
   let f ({ pvb_pat; pvb_expr; pvb_attributes; pvb_loc } as vb) =
-    let dps_fun = dps_function_name @@ get_vb_name vb in
+    let dps_fun = DpsFuns.find (get_vb_name vb).txt dps_funs in
     let vb =
       let dps_fun_expr =
         Ast.pexp_ident ~loc:pvb_loc @@ Ast.Located.map_lident dps_fun
