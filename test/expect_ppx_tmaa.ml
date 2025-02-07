@@ -21,8 +21,8 @@ end
 
 let expr_testable =
   let pp fmt e =
-    Pp_ast.expression fmt (simplifier#expression e)
-    (* Pprintast.expression fmt (simplifier#expression e) *)
+    (* Pp_ast.expression fmt (simplifier#expression e) *)
+    Pprintast.expression fmt (simplifier#expression e)
   in
   let equal expr1 expr2 =
     simplifier#expression expr1 = simplifier#expression expr2
@@ -176,6 +176,26 @@ let expr_tests = List.map check_expr [
       then AsyncFun.fork (fun () -> f_dps dest__002_ x)
       else Destiny.chain e dest__002_
     ];
+
+    "map async",
+    [%expr
+      match l with
+      | [] -> []
+      | x :: xs ->
+        f x :: A.await (f aux xs)
+    ],
+    [%expr
+      match l with
+      | [] -> Destiny.fill dest []
+      | x::xs ->
+        let [dest__002_; dest__003_] =
+          let v__001_ = Loc.dummy :: Loc.dummy in
+          Destiny.refine dest v__001_ [Loc.mk v__001_ 0; Loc.mk v__001_ 1]
+        in
+        AsyncFun.fork (fun () -> f_dps dest__003_ aux xs);
+        Destiny.fill dest__002_ (f x)
+
+    ]
   ]
 
 (** Test runner. *)
