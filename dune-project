@@ -15,7 +15,7 @@
  (depends
   (ocaml (>= 5.0))
    dune picos ppxlib
-  (picos_mux (= :with-test))
-  (ppx_deriving (= :with-test))
-  (alcotest (= :with-test))
+  (picos_mux :with-test)
+  (ppx_deriving :with-test)
+  (alcotest :with-test)
 ))
