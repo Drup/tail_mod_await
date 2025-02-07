@@ -1,0 +1,6 @@
+(test
+ (name tree_map)
+ (preprocess (pps ppx_tmaa ppx_deriving.show))
+ (libraries picos_mux.fifo)
+ (modules tree_map)
+)
