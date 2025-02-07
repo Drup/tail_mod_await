@@ -12,6 +12,7 @@ depends: [
   "picos"
   "ppxlib"
   "picos_mux" {= with-test}
+  "ppx_deriving" {= with-test}
   "alcotest" {= with-test}
   "odoc" {with-doc}
 ]
