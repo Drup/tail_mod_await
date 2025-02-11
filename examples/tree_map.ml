@@ -6,8 +6,7 @@ type 'a tree = N of 'a * 'a tree * 'a tree | L
 let%async rec map f t : 'a tree = match t with
   | L -> L
   | N (v , tl , tr ) ->
-    let tr = map f tr in
-    N (f v, Computation.await (map f tl), Computation.await tr)
+    N (f v, Computation.await (map f tl), Computation.await (map f tr))
 
 let tree0 = N (4, N (20, L, L), N (12, N (3, L, L), L))
 

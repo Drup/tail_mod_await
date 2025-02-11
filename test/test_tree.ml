@@ -37,8 +37,9 @@ let map_manual f t =
 let%async rec map_tmaa f t : tree = match t with
   | L -> L
   | N (v , tl , tr ) ->
-    let tr = map_tmaa f tr in
-    N (f v, Computation.await (map_tmaa f tl), Computation.await tr)
+    N (f v,
+       Computation.await (map_tmaa f tl),
+       Computation.await (map_tmaa f tr))
 
 let check tree f_reference f_others =
   let open Alcotest in
