@@ -43,11 +43,11 @@ end
 module Destiny = struct
   
   type -'h t =
-      Destiny : {
+      Destiny of {
         counter : int Atomic.t ;
         resolve : unit -> unit ;
         set : 'h -> unit ;
-      } -> 'h t
+      }
 
   type 'a list =
     | [] : unit list

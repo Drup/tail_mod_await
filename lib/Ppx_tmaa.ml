@@ -123,6 +123,9 @@ class refiner modpath dps_funs = object (refiner)
   method rewrite_cons e0 =
     let loc = e0.pexp_loc in
     match e0.pexp_desc with
+    (* Variable *)
+    | Pexp_ident _ ->
+      Cons e0
     (* Constants and Unitary Constructor K or `K *)
     | Pexp_constant _
     | Pexp_construct (_, None) | Pexp_variant (_, None) ->
@@ -170,7 +173,7 @@ class refiner modpath dps_funs = object (refiner)
         {pexp_desc = Pexp_ident {txt = Ldot (p, "await"); _} ; _},
         [Nolabel, body]
       )
-    (* [await @@ e] context *)
+    (* [await @@ e] context *)
     | Pexp_apply (
         {pexp_desc = Pexp_ident {txt = Lident "@@"; _} ; _},
         [Nolabel, {pexp_desc = Pexp_ident {txt = Ldot (p, "await"); _} ; _};
@@ -329,13 +332,13 @@ let rewrite_dps modpath dps_funs =
       | Pexp_variant (_, _)
       | Pexp_record (_, _)
       | Pexp_array _
-        -> (new refiner modpath dps_funs)#refine dest e0
+      (* call *)
+      | Pexp_apply (_, _)
       (* Return position *)
       | Pexp_ident _
       | Pexp_constant _
       | Pexp_function _
       | Pexp_fun (_, _, _, _)
-      | Pexp_apply (_, _)
       | Pexp_field (_, _)
       | Pexp_setfield (_, _, _)
       | Pexp_send (_, _) 
@@ -346,7 +349,7 @@ let rewrite_dps modpath dps_funs =
       | Pexp_pack _
       | Pexp_newtype (_, _)
       | Pexp_lazy _
-        -> Destiny.fill ~loc:e0.pexp_loc ~dest e0
+        -> (new refiner modpath dps_funs)#refine dest e0
 
       (* Type annotations *)
       | Pexp_constraint (body, ty) ->
