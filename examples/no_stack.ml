@@ -24,6 +24,13 @@ let%async rec fmap_async f l =
   | x :: xs ->
     f x :: Computation.await (fmap_async f xs)
 
+let%async rec map_async f l =
+  match l with
+  | [] -> []
+  | x :: xs ->
+    let y = Computation.await (f x) in
+    y :: Computation.await (map_async f xs)
+
 let%async rec traverse_async f l =
   match l with
   | [] -> []

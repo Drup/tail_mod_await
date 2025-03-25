@@ -13,3 +13,12 @@
  )
  (modules no_stack)
 )
+
+(executable
+ (name read_files_icfp)
+ (preprocess (pps ppx_tmaa ppx_deriving.show))
+ (libraries picos_mux.fifo mtime.clock
+            ; memtrace
+ )
+ (modules read_files_icfp)
+)
