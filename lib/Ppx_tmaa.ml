@@ -77,7 +77,7 @@ type subterm =
 *)
 let map_subterm_if_awaits e0 f sub = match sub with
   | Expression _ | Cons _ -> Expression e0
-  | Awaits mke -> Awaits (Fun.compose f mke)
+  | Awaits mke -> Awaits (fun x -> f @@ mke x)
 
 (** A [refiner] turns a constructor in terminal position into a call to refine.
 
