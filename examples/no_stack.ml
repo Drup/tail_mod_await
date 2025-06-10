@@ -1,4 +1,4 @@
-(* Memtrace.trace_if_requested ~context:"tmaa_no_stack" ();; *)
+Memtrace.trace_if_requested ~context:"tmaa_no_stack" ();;
 
 open Picos
 
@@ -74,6 +74,11 @@ let main () =
   stop c;
   let c = start "fmap_async" in
   ignore @@ Computation.await @@ fmap_async (counted_id ()) l;
+  stop c;
+  let c = start "map_async" in
+  let f = counted_id () in
+  ignore @@ Computation.await @@
+  map_async (fun e -> Computation.returned @@ f e) l;
   stop c;
   let c = start "traverse_async" in
   let f = counted_id () in

@@ -6,10 +6,18 @@
 )
 
 (executable
+ (name bench_tree)
+ (preprocess (pps ppx_tmaa ppx_deriving.show))
+ (libraries picos_mux.random mtime.clock
+            memtrace bechamel bechamel-js bechamel-notty notty.unix bechamel-perf)
+ (modules bench_tree)
+)
+
+(executable
  (name no_stack)
  (preprocess (pps ppx_tmaa ppx_deriving.show))
  (libraries picos_mux.fifo mtime.clock
-            ; memtrace
+            memtrace
  )
  (modules no_stack)
 )
@@ -18,7 +26,6 @@
  (name read_files_icfp)
  (preprocess (pps ppx_tmaa ppx_deriving.show))
  (libraries picos_mux.fifo mtime.clock
-            ; memtrace
  )
  (modules read_files_icfp)
 )
