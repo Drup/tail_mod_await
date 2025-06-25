@@ -5,6 +5,13 @@
  (modules tree_map)
 )
 
+(test
+ (name tree_map_annotated)
+ (preprocess (pps ppx_tmaa ppx_deriving.show))
+ (libraries picos_mux.fifo)
+ (modules tree_map_annotated)
+)
+
 (executable
  (name bench_tree)
  (preprocess (pps ppx_tmaa ppx_deriving.show))
@@ -22,10 +29,10 @@
  (modules no_stack)
 )
 
-(executable
- (name read_files_icfp)
- (preprocess (pps ppx_tmaa ppx_deriving.show))
- (libraries picos_mux.fifo mtime.clock
- )
- (modules read_files_icfp)
-)
+; (executable
+;  (name read_files_icfp)
+;  (preprocess (pps ppx_tmaa ppx_deriving.show))
+;  (libraries picos_mux.fifo mtime.clock
+;  )
+;  (modules read_files_icfp)
+; )
