@@ -7,8 +7,8 @@
 
 (test
  (name tree_map_annotated)
- (preprocess (pps ppx_tmaa ppx_deriving.show))
- (libraries picos_mux.fifo)
+ (preprocess (pps ppx_tmaa ppx_deriving.show ppx_deriving.eq))
+ (libraries picos_mux.fifo alcotest)
  (modules tree_map_annotated)
 )
 
