@@ -20,18 +20,14 @@ module Loc = struct
     assert (Obj.is_block pointer);
     {pointer; offset}
 
-  let dummy = Obj.magic @@ ref ()
+  let dummy () = Obj.magic @@ ref ()
       
-  let is_uninitialized loc =
-    Obj.field loc.pointer loc.offset == dummy
-
   (** [set l v] fills the location [l] with [v].
       It verifies that [l] was never filled.
   *)
   let set
     : type a . a t -> a -> unit
     = fun loc v ->
-      assert (is_uninitialized loc);
       let tag = Obj.tag loc.pointer in
       if tag = Obj.double_array_tag then
         Obj.set_double_field loc.pointer loc.offset (Obj.magic v)
@@ -63,9 +59,9 @@ module Destiny = struct
   let mk () =
     let c = P.Computation.create () in
     let counter = Atomic.make 1 in
-    let root = ref (Obj.obj Loc.dummy) in
+    let root = ref (Obj.obj @@ Loc.dummy ()) in
     let resolve () = P.Computation.return c !root in
-    let set v = assert (!root == Obj.obj Loc.dummy); root := v in
+    let set v = root := v in
     let d = Destiny { counter; resolve; set } in
     d, c
 

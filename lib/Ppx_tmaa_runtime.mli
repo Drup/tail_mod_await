@@ -8,7 +8,7 @@ module Loc : sig
     | (::) : 'h t * 'h2 list -> ('h * 'h2) list
 
   (** A dummy value to be inserted into blocks. *)
-  val dummy : 'a
+  val dummy : unit -> 'a
   
   (** [Loc.mk o i] is the location in value [o] at offset [i].
 

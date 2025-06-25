@@ -11,7 +11,7 @@ module Loc = struct
 
   let dummy ~loc =
     let loc = {loc with loc_ghost = true} in
-    [%expr Ppx_tmaa_runtime.Loc.dummy]
+    [%expr Ppx_tmaa_runtime.Loc.dummy ()]
 end
 
 (** Reified module {!Ppx_tmaa_runtime.Destiny}. *)
@@ -234,35 +234,50 @@ class refiner modpath dps_funs = object (refiner)
       and build the final using [alloc_expr]. *)
   method allocate_cons ~loc ?(shift=0) subterms alloc_expr =
     let subterms = List.map refiner#rewrite_cons subterms in
+    let subterms_with_tyvars =
+      List.map (fun e -> e, Ast.ptyp_var ~loc:Location.none (gen_symbol ~prefix:"t_" ()))
+        subterms
+    in
     let alloc_pat, alloc_var = gen_var ~loc ~prefix:"v" () in
     let allocation_binding =
       let subvalues =
         List.map
-          (function Cons e -> e | Expression _ | Awaits _ -> Loc.dummy ~loc)
-          subterms
+          (function
+            | Cons e, _ -> e
+            | Expression _, ty | Awaits _, ty ->
+              Ast.pexp_constraint ~loc (Loc.dummy ~loc) ty)
+          subterms_with_tyvars
       in
       let expr = alloc_expr subvalues in
       Ast.value_binding ~loc ~pat:alloc_pat ~expr
     in
     bindings <- allocation_binding :: bindings;
     List.iteri (fun i e -> match e with
-        | Cons _ ->
+        | Cons _, _ ->
           ()
-        | Expression computation ->
+        | Expression computation, ty ->
           let dest_pat, dest_var = fresh_dest loc in
-          locations <- Loc.mk ~loc alloc_var (shift+i) :: locations;
+          let new_location =
+            let ty = [%type: [%t ty] Ppx_tmaa_runtime.Loc.t] in
+            Ast.pexp_constraint ~loc (Loc.mk ~loc alloc_var (shift+i)) ty
+          in
+          locations <- new_location :: locations;
           destinies <- dest_pat :: destinies;
           let e = Destiny.fill ~loc ~dest:dest_var computation in
           sync_computation <- e :: sync_computation;
           ()
-        | Awaits f ->
+        | Awaits f, ty ->
           let dest_pat, dest_var = fresh_dest loc in
-          locations <- Loc.mk ~loc alloc_var (shift+i) :: locations;
+          let new_location =
+            let ty = [%type: [%t ty] Ppx_tmaa_runtime.Loc.t] in
+            Ast.pexp_constraint ~loc (Loc.mk ~loc alloc_var (shift+i)) ty
+          in
+          locations <- new_location :: locations;
           destinies <- dest_pat :: destinies;
           let e = f dest_var in
           async_computations <- e :: async_computations;
           ()
-      ) subterms;
+      ) subterms_with_tyvars;
     Cons alloc_var
 
   (* [rewrite_await dest e] rewrite [e] when placed inside an await. *)
@@ -338,7 +353,6 @@ let rewrite_dps modpath dps_funs =
       | Pexp_ident _
       | Pexp_constant _
       | Pexp_function _
-      | Pexp_fun (_, _, _, _)
       | Pexp_field (_, _)
       | Pexp_setfield (_, _, _)
       | Pexp_send (_, _) 
@@ -420,51 +434,76 @@ let rewrite_dps modpath dps_funs =
         -> Destiny.fill ~loc:e0.pexp_loc ~dest e0
   end
 
-let rec wrap_function_args rev_arg_list f e = match e.pexp_desc with
-  | Pexp_newtype (_ty, body) ->
-    wrap_function_args rev_arg_list f body
-  | Pexp_fun (lbl, _opt, _pat, body) ->
-    let pat_loc = _pat.ppat_loc in
-    let name = gen_symbol ~prefix:"arg$" () in
-    let pat = Ast.ppat_var ~loc:pat_loc @@ Ast.Located.mk ~loc:pat_loc name in
-    let arg = Ast.pexp_ident ~loc:pat_loc @@ Ast.Located.lident ~loc:pat_loc name in
-    { e with pexp_desc =
-               Pexp_fun (lbl, None, pat,
-                         wrap_function_args ((lbl,arg)::rev_arg_list) f body) }
-  (* | Pexp_function cases -> *)
-  (*   let arg =  *)
-  (*   let cases = *)
-  (*     List.map *)
-  (*       (fun case -> {case with pc_rhs = map_function_body (n+1) f case.pc_rhs}) *)
-  (*       cases *)
-  (*   in *)
-  (*   { e with pexp_desc = Pexp_function cases } *)
-  | _ ->
-    (* Found the body *)
-    f (List.rev rev_arg_list) e
-let wrap_function_args = wrap_function_args []
-
-let rec map_function_body f e = match e.pexp_desc with
-  | Pexp_newtype (ty, body) ->
-    { e with pexp_desc = Pexp_newtype (ty, map_function_body f body) }
-  | Pexp_fun (lbl, opt, pat, body) ->
-    { e with pexp_desc = Pexp_fun (lbl, opt, pat, map_function_body f body) }
-  | Pexp_function cases ->
-    let cases =
-      List.map
-        (fun case -> {case with pc_rhs = map_function_body f case.pc_rhs})
-        cases
-    in
-    { e with pexp_desc = Pexp_function cases }
-  | _ ->
-    (* Found the body *)
-    f e
+(** Traverse function arguments to modify the body.
+    Leave all parameters unchanged.
+*)
 
 let dps_function_body o e =
   let loc = e.pexp_loc in
   let dest_pat, dest_expr = fresh_dest loc in
-  Ast.pexp_fun ~loc Nolabel None dest_pat @@
-  map_function_body (fun e -> o#expression dest_expr e) e
+  let rec process_function dest_typ e = match e.pexp_desc with
+    | Pexp_newtype (ty, body) ->
+      { e with pexp_desc = Pexp_newtype (ty, process_function dest_typ body) }
+    | Pexp_function (params, dest_typ, Pfunction_body body) ->
+      let body = Pfunction_body (process_function dest_typ body) in
+      { e with pexp_desc = Pexp_function (params, None, body) }
+    | Pexp_function (params, typ, Pfunction_cases (cases, loc, attrs)) ->
+      let cases =
+        List.map
+          (fun case ->
+             {case with pc_rhs = process_function dest_typ case.pc_rhs})
+          cases
+      in
+      let body = Pfunction_cases (cases, loc, attrs) in
+      { e with pexp_desc = Pexp_function (params, typ, body) }
+    | _ ->
+      (* Found the body *)
+      let loc = e.pexp_loc in
+      let typ_cstr = match dest_typ with
+        | None -> dest_expr
+        | Some Pconstraint ty ->
+          let ty = [%type: [%t ty] Ppx_tmaa_runtime.Destiny.t] in
+          Ast.pexp_constraint ~loc dest_expr ty
+        | Some Pcoerce (ty1, ty2) ->
+          let ty1 =
+            Option.map
+              (fun ty1 -> [%type: [%t ty1] Ppx_tmaa_runtime.Destiny.t])
+              ty1
+          in
+          let ty2 = [%type: [%t ty2] Ppx_tmaa_runtime.Destiny.t] in
+          Ast.pexp_coerce ~loc dest_expr ty1 ty2
+      in
+      Ast.pexp_let ~loc Nonrecursive
+        [Ast.value_binding ~loc ~pat:dest_pat ~expr:typ_cstr] @@
+      o#expression dest_expr e
+  in 
+  Ast.pexp_fun ~loc Nolabel None dest_pat @@ process_function None e
+
+(** Wrap a function definition to insert `async` in the body. *)
+let rec wrap_function arg_list f e = match e.pexp_desc with
+  | Pexp_newtype (_ty, body) ->
+    wrap_function arg_list f body
+  | Pexp_function (params, typ, Pfunction_body body) ->
+    let params, args =
+      List.split @@
+      List.filter_map (function
+          | { pparam_desc = Pparam_newtype _; _ } -> None
+          | { pparam_loc = loc ; pparam_desc = Pparam_val (lbl, _, _) } ->
+            let name = gen_symbol ~prefix:"arg$" () in
+            let pat = Ast.ppat_var ~loc @@ Ast.Located.mk ~loc name in
+            let arg = Ast.pexp_ident ~loc @@ Ast.Located.lident ~loc name in
+            let param =
+              { pparam_loc = loc ; pparam_desc = Pparam_val (lbl, None, pat) }
+            in
+            Some (param, (lbl, arg))
+        ) params
+    in
+    let body = wrap_function (arg_list@args) f body in
+    { e with pexp_desc = Pexp_function (params, typ, Pfunction_body body) }
+  | _ ->
+    (* Found the body *)
+    f arg_list e
+let wrap_function_args = wrap_function []
 
 let entry_function_body dps_fun e =
   wrap_function_args
@@ -501,18 +540,20 @@ let rewrite_async_bindings
         l        
   in
   let o = rewrite_dps modpath dps_funs in
-  let f ({ pvb_pat; pvb_expr; pvb_attributes; pvb_loc } as vb) =
+  let f ({ pvb_pat; pvb_expr; _ } as vb) =
     let dps_fun = DpsFuns.find (get_vb_name vb).txt dps_funs in
     let vb =
+      let loc = vb.pvb_loc in
       let dps_fun_expr =
-        Ast.pexp_ident ~loc:pvb_loc @@ Ast.Located.map_lident dps_fun
+        Ast.pexp_ident ~loc @@ Ast.Located.map_lident dps_fun
       in
       let pvb_expr = entry_function_body dps_fun_expr pvb_expr in
-      { pvb_pat ; pvb_attributes; pvb_loc; pvb_expr }
+      { vb with pvb_expr }
     and vb_dps =
-      let pvb_pat = Ast.ppat_var ~loc:pvb_pat.ppat_loc dps_fun in
+      let loc = pvb_pat.ppat_loc in
+      let pvb_pat = Ast.ppat_var ~loc dps_fun in
       let pvb_expr = dps_function_body o pvb_expr in
-      { pvb_pat ; pvb_attributes = []; pvb_loc; pvb_expr }
+      { vb with pvb_pat ; pvb_attributes = []; pvb_expr }
     in
     vb, vb_dps
   in

@@ -3,7 +3,7 @@ open Picos
 type 'a tree = N of 'a * 'a tree * 'a tree | L
 [@@deriving show { with_path = false }]
 
-let%async rec map f t : 'a tree = match t with
+let%async rec map f t = match t with
   | L -> L
   | N (v , tl , tr ) ->
     N (f v, Computation.await (map f tl), Computation.await (map f tr))

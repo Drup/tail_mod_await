@@ -14,7 +14,8 @@
  (synopsis "A ppx implementing the tail mod Async/Await transformation")
  (depends
   (ocaml (>= 5.0))
-   dune picos ppxlib
+  dune picos
+  (ppxlib (>= 0.36.0))
   (picos_mux :with-test)
   (ppx_deriving :with-test)
   (alcotest :with-test)

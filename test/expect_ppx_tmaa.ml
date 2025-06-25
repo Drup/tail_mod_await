@@ -50,10 +50,10 @@ let expr_tests = List.map check_expr [
     "complicated constant",
     [%expr Foo (`Bar, 15, [| Bar |], {x=3})],
     [%expr
-      let v__001_ = [|Bar|] in
-      let v__002_ = { x = 3 } in
-      let v__003_ = Foo (`Bar, 15, v__001_, v__002_) in
-      Destiny.fill dest v__003_
+      let v__002_ = [|Bar|] in
+      let v__004_ = { x = 3 } in
+      let v__009_ = Foo (`Bar, 15, v__002_, v__004_) in
+      Destiny.fill dest v__009_
     ];
 
     "constant constructor",
@@ -64,38 +64,45 @@ let expr_tests = List.map check_expr [
     "1-constructor",
     [%expr A (A.await e)],
     [%expr
-       let [dest__002_] =
-         let v__001_ = A Loc.dummy in
-         Destiny.refine dest v__001_ [Loc.mk v__001_ 0]
-       in
-       Destiny.chain e dest__002_
+      let dest__003_::[] =
+        let v__002_ = A (Loc.dummy () : 't___001_) in
+        Destiny.refine dest v__002_
+          [(Loc.mk v__002_ 0 : 't___001_ Loc.t)] in
+      Destiny.chain e dest__003_
     ];
     "tuple-constructor",
     [%expr A (A.await e1, 4, A.await e2, 5)],
     [%expr
-       let [dest__002_; dest__003_] =
-         let v__001_ = A (Loc.dummy, 4, Loc.dummy, 5) in
-         Destiny.refine dest v__001_ [Loc.mk v__001_ 0; Loc.mk v__001_ 2]
-       in
-       Destiny.chain e2 dest__003_;
-       Destiny.chain e1 dest__002_
+      let dest__006_::dest__007_::[] =
+        let v__005_ =
+          A ((Loc.dummy () : 't___001_), 4, (Loc.dummy () : 't___003_), 5)
+        in
+        Destiny.refine dest v__005_
+          [(Loc.mk v__005_ 0 : 't___001_ Loc.t);
+           (Loc.mk v__005_ 2 : 't___003_ Loc.t)]
+      in
+      Destiny.chain e2 dest__007_; Destiny.chain e1 dest__006_
      ];
 
     "simple await", 
     [%expr A (A.await e)],
     [%expr
-      let [dest__002_] =
-        let v__001_ = A Loc.dummy in
-        Destiny.refine dest v__001_ [Loc.mk v__001_ 0] in
-      Destiny.chain e dest__002_
+      let dest__003_::[] =
+        let v__002_ = A (Loc.dummy () : 't___001_) in
+        Destiny.refine dest v__002_
+          [(Loc.mk v__002_ 0 : 't___001_ Loc.t)]
+      in
+      Destiny.chain e dest__003_
     ];
     "simple await with @@", 
     [%expr A (A.await @@ e)],
     [%expr
-      let [dest__002_] =
-        let v__001_ = A Loc.dummy in
-        Destiny.refine dest v__001_ [Loc.mk v__001_ 0] in
-      Destiny.chain e dest__002_
+      let dest__003_::[] =
+        let v__002_ = A (Loc.dummy () : 't___001_) in
+        Destiny.refine dest v__002_
+          [(Loc.mk v__002_ 0 : 't___001_ Loc.t)]
+      in
+      Destiny.chain e dest__003_
     ];
 
     "constant polyvar",
@@ -106,75 +113,88 @@ let expr_tests = List.map check_expr [
     "1-polyvar",
     [%expr `A (A.await e)],
     [%expr
-       let [dest__002_] =
-         let v__001_ = `A Loc.dummy in
-         Destiny.refine dest v__001_ [Loc.mk v__001_ 1]
-       in
-       Destiny.chain e dest__002_
+      let dest__003_::[] =
+        let v__002_ = `A (Loc.dummy () : 't___001_) in
+        Destiny.refine dest v__002_
+          [(Loc.mk v__002_ 1 : 't___001_ Loc.t)]
+      in
+      Destiny.chain e dest__003_
     ];
     "tuple-polyvar",
     [%expr `A (A.await e1, 4, A.await e2, 5)],
     [%expr
-      let [dest__002_; dest__003_] =
-        let v__001_ = (Loc.dummy, 4, Loc.dummy, 5) in
-        let v__004_ = `A v__001_ in
-        Destiny.refine dest v__004_ [Loc.mk v__001_ 0; Loc.mk v__001_ 2]
+      let dest__006_::dest__007_::[] =
+        let v__005_ =
+          ((Loc.dummy () : 't___001_), 4, (Loc.dummy () : 't___003_), 5)
+        in
+        let v__009_ = `A v__005_ in
+        Destiny.refine dest v__009_
+          [(Loc.mk v__005_ 0 : 't___001_ Loc.t);
+           (Loc.mk v__005_ 2 : 't___003_ Loc.t)]
       in
-      Destiny.chain e2 dest__003_; Destiny.chain e1 dest__002_
+      Destiny.chain e2 dest__007_; Destiny.chain e1 dest__006_
     ];
 
     "linear control expr", 
     [%expr A Foo.(f y)],
     [%expr
-      let dest__002_::[] =
-        let v__001_ = A Loc.dummy in
-        Destiny.refine dest v__001_ [Loc.mk v__001_ 0] in
-      Destiny.fill dest__002_ Foo.(f y)
+      let dest__003_::[] =
+        let v__002_ = A (Loc.dummy () : 't___001_) in
+        Destiny.refine dest v__002_
+          [(Loc.mk v__002_ 0 : 't___001_ Loc.t)]
+      in
+      Destiny.fill dest__003_ (let open Foo in f y)
     ];
 
     "linear control cons", 
     [%expr A Foo.(B 3)],
     [%expr
-      let [dest__003_] =
-        let v__001_ = B 3 in
-        let v__002_ = A Loc.dummy in
-        Destiny.refine dest v__002_ [Loc.mk v__002_ 0] in
-      Destiny.fill dest__003_ Foo.(B 3)
+      let dest__005_::[] =
+        let v__002_ = B 3 in
+        let v__004_ = A (Loc.dummy () : 't___003_) in
+        Destiny.refine dest v__004_
+          [(Loc.mk v__004_ 0 : 't___003_ Loc.t)]
+      in
+      Destiny.fill dest__005_ (let open Foo in B 3)
     ];
 
     "linear control await", 
     [%expr A (let x = 3 in A.await (let y = 2 in f x y))],
     [%expr
-      let [dest__002_] =
-        let v__001_ = A Loc.dummy in
-        Destiny.refine dest v__001_ [Loc.mk v__001_ 0]
+      let dest__003_::[] =
+        let v__002_ = A (Loc.dummy () : 't___001_) in
+        Destiny.refine dest v__002_
+          [(Loc.mk v__002_ 0 : 't___001_ Loc.t)]
       in
       let x = 3 in
-      let y = 2 in
-      AsyncFun.fork (fun () -> f_dps dest__002_ x y)
+      let y = 2 in AsyncFun.fork (fun () -> f_dps dest__003_ x y)
     ];
 
     "branching outside await", 
     [%expr A (if b then A.await (f x) else A.await e)],
     [%expr
-      let dest__002_::[] =
-        let v__001_ = A Loc.dummy in
-        Destiny.refine dest v__001_ [Loc.mk v__001_ 0] in
+      let dest__003_::[] =
+        let v__002_ = A (Loc.dummy () : 't___001_) in
+        Destiny.refine dest v__002_
+          [(Loc.mk v__002_ 0 : 't___001_ Loc.t)]
+      in
       if b
-      then AsyncFun.fork (fun () -> f_dps dest__002_ x)
-      else Destiny.chain e dest__002_
+      then AsyncFun.fork (fun () -> f_dps dest__003_ x)
+      else Destiny.chain e dest__003_
     ];
 
     "branching inside await", 
     [%expr A (let x = 3 in A.await (if b then f x else e))],
     [%expr
-      let [dest__002_] =
-        let v__001_ = A Loc.dummy in
-        Destiny.refine dest v__001_ [Loc.mk v__001_ 0] in
-      let x = 3 in 
+      let dest__003_::[] =
+        let v__002_ = A (Loc.dummy () : 't___001_) in
+        Destiny.refine dest v__002_
+          [(Loc.mk v__002_ 0 : 't___001_ Loc.t)]
+      in
+      let x = 3 in
       if b
-      then AsyncFun.fork (fun () -> f_dps dest__002_ x)
-      else Destiny.chain e dest__002_
+      then AsyncFun.fork (fun () -> f_dps dest__003_ x)
+      else Destiny.chain e dest__003_
     ];
 
     "map async",
@@ -188,13 +208,16 @@ let expr_tests = List.map check_expr [
       match l with
       | [] -> Destiny.fill dest []
       | x::xs ->
-        let [dest__002_; dest__003_] =
-          let v__001_ = Loc.dummy :: Loc.dummy in
-          Destiny.refine dest v__001_ [Loc.mk v__001_ 0; Loc.mk v__001_ 1]
+        let dest__004_::dest__005_::[] =
+          let v__003_ =
+            (Loc.dummy () : 't___001_) :: (Loc.dummy () : 't___002_)
+          in
+          Destiny.refine dest v__003_
+            [(Loc.mk v__003_ 0 : 't___001_ Loc.t);
+             (Loc.mk v__003_ 1 : 't___002_ Loc.t)]
         in
-        AsyncFun.fork (fun () -> f_dps dest__003_ aux xs);
-        Destiny.fill dest__002_ (f x)
-
+        AsyncFun.fork (fun () -> f_dps dest__005_ aux xs);
+        Destiny.fill dest__004_ (f x)
     ]
   ]
 

@@ -5,7 +5,7 @@ type tree = N of int * tree * tree | L
 
 (* A sequential version, for reference. *)
 
-let rec map_sequential f t : tree = match t with
+let rec map_sequential f t = match t with
   | L -> L
   | N (v , tl , tr ) ->
     N (f v, map_sequential f tl, map_sequential f tr)
@@ -18,7 +18,7 @@ let rec map_dps_manual d f t =
   | L ->
     Destiny.fill d L
   | N (v, t1, t2) ->
-    let t : tree = N (f v, Loc.dummy, Loc.dummy) in
+    let t : tree = N (f v, Loc.dummy (), Loc.dummy ()) in
     let left : tree Loc.t = Loc.mk t 1 in
     let right : tree Loc.t = Loc.mk t 2 in
     let [d_left; d_right] = Destiny.refine d t [ left ; right ] in
@@ -34,7 +34,7 @@ let map_manual f t =
 
 (* A fully concurrent automatic version. *)
 
-let%async rec map_tmaa f t : tree = match t with
+let%async rec map_tmaa f t = match t with
   | L -> L
   | N (v , tl , tr ) ->
     N (f v,
