@@ -54,5 +54,5 @@ make test
 To see the output of the ppx transformation
 
 ```
-dune exec test/pp.exe SOMEFILE.ml
+dune describe pp SOMEFILE.ml
 ```
