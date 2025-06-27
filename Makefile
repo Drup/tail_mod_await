@@ -2,10 +2,10 @@
 default: build
 
 .PHONY: build
-build: 
+build:
 	dune build @install
 
-.PHONY: testy
+.PHONY: test
 test:
 	dune runtest
 
@@ -22,5 +22,5 @@ bench:
 	dune exec ./bench/bench_tree.exe
 	jq -f bench/extract_from_bechamel.jq short.raw.json > short.json
 	jq -f bench/extract_from_bechamel.jq long.raw.json > long.json
-	python bench/multiseries.py short.json 
-	python bench/multiseries.py long.json 
+	python bench/multiseries.py short.json
+	python bench/multiseries.py long.json
