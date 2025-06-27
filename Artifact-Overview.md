@@ -48,6 +48,7 @@ For memory benchmark:
 - An alternative switch with ocaml 5.1
 - Linux
 - A web browser
+- gmp
 
 ## Getting Started
 
