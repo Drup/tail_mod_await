@@ -6,7 +6,7 @@ USER opam
 
 RUN sudo pacman -Syu --noconfirm
 
-RUN sudo pacman -S jq python python-matplotlib gmp pkgconf firefox --noconfirm
+RUN sudo pacman -S jq python python-matplotlib gmp pkgconf --noconfirm
 
 WORKDIR tail_mod_await/
 

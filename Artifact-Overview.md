@@ -65,6 +65,17 @@ opam switch create --no-switch memtrace_viewer --packages ocaml.5.1.1,memtrace_v
 
 Exact dependencies can be found in [ppx_tmaa.opam](ppx_tmaa.opam).
 
+### Docker-specific instructions
+
+This artifact is shipped with a docker image [tail-mod-await-image.tar](tail-mod-await-image.tar).
+
+To run it:
+
+```
+docker load < tail-mod-await-image.tar.gz
+docker run -p 8080:8080 -it tail-mod-await-image:latest
+```
+
 ### Basic Usage
 
 Build everything with `make`.
