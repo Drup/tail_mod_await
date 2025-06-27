@@ -59,7 +59,7 @@ With opam installed (takes around 10 minutes):
 opam switch create ocaml.5.3.0 # Create a fresh OCaml switch
 eval $(opam env) # enable the new switch
 opam install --deps --with-test path/to/artifact # Install all the dependencies
-opam switch create --no-switch memtrace_viewer.v0.17.0 # Alternative switch for memory viewer
+opam switch create --no-switch memtrace_viewer --packages ocaml.5.1.1,memtrace_viewer.v0.17.0 # Alternative switch for memory viewer
 ```
 
 Exact dependencies can be found in [ppx_tmaa.opam](ppx_tmaa.opam).
