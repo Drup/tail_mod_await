@@ -130,7 +130,13 @@ of all the functions.
 One can adjust the degree of parallelism by modifying the `n_domains` variable
 at the beginning of the file. It is 4 by default.
 
-You can run it with `make bench`. It is expected to take between 5 and 10 minutes.
+You can run it with:
+
+```
+make bench
+```
+
+It is expected to take between 5 and 10 minutes.
 
 It outputs two graphs:
 - `short.png` corresponding to figure 32.a.
