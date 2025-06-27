@@ -50,8 +50,9 @@ For performance benchmark:
 With opam installed (takes around 10 minutes): 
 
 ```
-opam switch create  ocaml.5.3.0 # Create a fresh OCaml switch
-opam install --deps -- with-test path/to/artifact # Install all the dependencies
+opam switch create ocaml.5.3.0 # Create a fresh OCaml switch
+eval $(opam env) # enable the new switch
+opam install --deps --with-test path/to/artifact # Install all the dependencies
 ```
 
 Exact dependencies can be found in [ppx_tmaa.opam](ppx_tmaa.opam).
