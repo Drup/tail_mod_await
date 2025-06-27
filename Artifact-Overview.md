@@ -43,6 +43,12 @@ For performance benchmark:
 - python
 - mathplotlib
 
+For memory benchmark:
+
+- An alternative switch with ocaml 5.1
+- Linux
+- A web browser
+
 ## Getting Started
 
 ### Installation from scratch (Without docker)
@@ -53,6 +59,7 @@ With opam installed (takes around 10 minutes):
 opam switch create ocaml.5.3.0 # Create a fresh OCaml switch
 eval $(opam env) # enable the new switch
 opam install --deps --with-test path/to/artifact # Install all the dependencies
+opam switch create --no-switch memtrace_viewer.v0.17.0 # Alternative switch for memory viewer
 ```
 
 Exact dependencies can be found in [ppx_tmaa.opam](ppx_tmaa.opam).
@@ -136,3 +143,28 @@ One should observe that:
   is much faster in the `short` case (as there is no synchronisation).
 - The various `_par` benefits from parallelism: they run faster by a factor
 of `n_domains` (4 by default).
+
+### Memory measurements
+
+This correspond to the paragraph "What is the effect of Tail-Modulo-Cons-Await on memory consumption?" in Section 4.3.
+
+The goal of this section is to reproduce Figure 31, which indicates
+*memory* measurements of various runs of `map` on lists.
+
+First run the benchmark with memory tracing to produce a file `trace.ctf`
+
+```
+make benchmem
+```
+
+Unfortunately, the viewer for such trace files requires an old OCaml version.
+We strongly recommend you use the provided Docker.
+Assuming the correct switch with `memtrace_viewer` is installed (either manually via the setup above, or thanks to our Docker), run the following command:
+
+```
+opam exec --switch memtrace_viewer -- memtrace-viewer trace.ctf
+```
+
+It will open a web-based UI where you can observe the graph on the left.
+It should look exactly like figure 31. In particular, all peaks should not be above the first peak, indicating they don't consume extra memory than
+the Tail-Modulo-Cons variant.

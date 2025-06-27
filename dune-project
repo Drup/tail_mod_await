@@ -21,4 +21,5 @@
   (alcotest :with-test)
   (bechamel :with-test)
   (bechamel-js :with-test)
+  (memtrace :with-test)
 ))

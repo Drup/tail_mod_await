@@ -24,3 +24,7 @@ bench:
 	jq -f bench/extract_from_bechamel.jq long.raw.json > long.json
 	python bench/multiseries.py short.json
 	python bench/multiseries.py long.json
+
+.PHONY: benchmem
+benchmem:
+	MEMTRACE=trace.ctf dune exec examples/no_stack.exe
