@@ -66,7 +66,10 @@ Run tests with `make test`.
 
 ### Running and Playing with Examples
 
-Examples are in [examples/](examples/). To run one specific examples: 
+Examples are in [examples/](examples/). 
+In particular, [examples/tree_map_annotated.ml](examples/tree_map_annotated.ml) contains a fully annotated example with detail explanations and comparison of our transformation.
+
+To run one specific examples: 
 
 ```
 dune exec examples/THEEXAMPLE.exe
