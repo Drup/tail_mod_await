@@ -32,7 +32,16 @@ For basic usage of the artifact: None.
 
 For memory benchmark: Need Linux.
 
-If not running under Docker: Need Opam and OCaml 5.3
+## Software dependencies
+
+- Opam
+- OCaml 5.3
+
+For performance benchmark:
+
+- jq
+- python
+- mathplotlib
 
 ## Getting Started
 
@@ -97,3 +106,29 @@ expect test of the following format:
 ```
 
 This allow to observe in a more isolated fashion the code and its transformation, along with various corner cases.
+
+### Performance measurements
+
+This correspond to the paragraph "What is the effect of Tail-Modulo-Cons-Await on performances and parallelism?" in Section 4.3.
+
+Benchmarks are available in the [bench/](bench/) directory. 
+The script [bench/bench_tree.ml](bench/bench_tree.ml) runs various
+`Tree.map` implementations in various contexts. See the paper for a description
+of all the functions.
+One can adjust the degree of parallelism by modifying the `n_domains` variable
+at the beginning of the file. It is 4 by default.
+
+You can run it with `make bench`. It is expected to take between 5 and 10 minutes.
+
+It outputs two graphs:
+- `short.png` corresponding to figure 32.a.
+  It maps a quick function. This allow to test the influence of synchronisation.
+- `long.png` corresponding to figure 32.b.
+  It maps a long function. This allows to observe parallelism.
+
+One should observe that:
+- Dashed lines (with our transformation) are equivalent or below plain lines.
+- The black `map_tmc` function, which is the non-async implementation of map 
+  is much faster in the `short` case (as there is no synchronisation).
+- The various `_par` benefits from parallelism: they run faster by a factor
+of `n_domains` (4 by default).

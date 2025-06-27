@@ -1,0 +1,6 @@
+(executable
+ (name bench_tree)
+ (preprocess (pps ppx_tmaa ppx_deriving.show))
+ (libraries picos_mux.random mtime.clock bechamel bechamel-js)
+ (modules bench_tree)
+)
