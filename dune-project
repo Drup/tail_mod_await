@@ -18,6 +18,7 @@
   (ppxlib (>= 0.36.0))
   (picos_mux :with-test)
   (ppx_deriving :with-test)
+  (mtime :with-test)
   (alcotest :with-test)
   (bechamel :with-test)
   (bechamel-js :with-test)
