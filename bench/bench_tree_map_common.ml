@@ -1,10 +1,9 @@
-(** Modify this to change the degree of parallelism. *)
-let n_domains = 4
-
 open Picos
 
 type 'a tree = N of 'a * 'a tree * 'a tree | L
 [@@deriving show { with_path = false }]
+
+(** Map functions *)
 
 let[@tail_mod_cons] rec map_tmc f t = match t with
   | L -> L
@@ -68,60 +67,25 @@ let%async rec map_par_full_tmca f t = match t with
        Computation.await (map_par_full_tmca f tl),
        Computation.await (map_par_full_tmca f tr))
 
+(** Tree generation *)
 
 let rec gen_tree size =
   if size = 0 then L
   else
     let left = Random.int size in
     let right = size - 1 - left in
-    N (Random.float 0.01, gen_tree left, gen_tree right)
+    N (Random.float 2., gen_tree left, gen_tree right)
 
-(** Benchmark*)
+(** Bechamel boilerplate *)
 open Bechamel
 
-let () = Random.init 123456
-
-let args = [ 100; 1000; 10_000; ]
-let trees =
-  List.map (fun i -> i, gen_tree i) args
-  |> List.to_seq
-  |> Hashtbl.of_seq
-
-let bench_tree_sync name f = 
-  Test.make_indexed ~name ~fmt:"%s %d"
-    ~args
-    (fun i -> Staged.stage @@ fun () -> f @@ Hashtbl.find trees i)
-
-let bench_tree_async name f = 
-  Test.make_indexed ~name ~fmt:"%s %d"
-    ~args
-    (fun i -> Staged.stage @@ fun () -> Computation.await @@ f @@ Hashtbl.find trees i)
-
-
-let long_fun x = Unix.sleepf (x/.20.)
-let short_fun x = x *. 12.
-
-let indexed_benchs f =
-  let test_tmc = bench_tree_sync "map_tmc" @@ map_tmc f in 
-  let test_seq = bench_tree_async "map_seq" @@ map_seq f in
-  let test_par_width = bench_tree_async "map_par_width" @@ map_par_width f in
-  let test_par_full = bench_tree_async "map_par_full" @@ map_par_full f in
-  let test_seq_tmca = bench_tree_async "map_seq_tmca" @@ map_seq_tmca f in
-  let test_par_width_tmca = bench_tree_async "map_par_width_tmca" @@ map_par_width_tmca f in
-  let test_par_full_tmca = bench_tree_async "map_par_tmca" @@ map_par_full_tmca f in
-  Test.make_grouped ~name:"tree bench" ~fmt:"%s %s"
-    [ test_tmc;
-      test_seq; test_par_width; test_par_full;
-      test_seq_tmca; test_par_width_tmca; test_par_full_tmca;
-    ]
-
-let benchmark f =
+let run_benchmark file benchs =
   let instances = [ Toolkit.Instance.monotonic_clock ] in
   let cfg =
-    Benchmark.cfg ~limit:100 ~stabilize:false
-      ~quota:(Time.second 10.) () in
+    Benchmark.cfg ~stabilize:false ~limit:1000 ~quota:(Time.second 10.) ()
+  in
   let raw_results =
-    Benchmark.all cfg instances @@ indexed_benchs f
+    Benchmark.all cfg instances benchs
   in
   let ols =
     Analyze.ols ~bootstrap:0 ~r_square:true ~predictors:[| Measure.run |]
@@ -130,24 +94,11 @@ let benchmark f =
     List.map (fun instance -> Analyze.all ols instance raw_results) instances
   in
   let results = Analyze.merge ols instances results in
-  (results, raw_results)
-
-
-let run ~file ~f =
-  let open Bechamel_js in
+  let dst = Bechamel_js.channel file in
   let nothing _ = Ok () in
-  let dst = channel file in
-  let results = benchmark f in
   let results =
-    emit ~dst nothing ~compare ~x_label:Measure.run
+    Bechamel_js.emit ~dst nothing ~compare ~x_label:Measure.run
       ~y_label:(Measure.label Toolkit.Instance.monotonic_clock)
-      results
+      (results, raw_results)
   in
   match results with Ok () -> () | Error (`Msg err) -> invalid_arg err
-
-let main () =
-  run ~file:"long.raw.json" ~f:long_fun;
-  run ~file:"short.raw.json" ~f:short_fun;
-  ()
-
-let () = Picos_mux_random.run_on ~n_domains main

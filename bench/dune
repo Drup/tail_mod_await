@@ -1,6 +1,9 @@
-(executable
- (name bench_tree)
+(executables
+ (names bench_synchro bench_parscaling bench_elemscaling)
  (preprocess (pps ppx_tmaa ppx_deriving.show))
- (libraries picos_mux.random mtime.clock bechamel bechamel-js)
- (modules bench_tree)
+ (libraries picos_mux.random mtime.clock  bechamel bechamel-js)
+ (modules
+   bench_tree_map_common
+   bench_synchro bench_parscaling bench_elemscaling
+ )
 )
