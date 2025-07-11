@@ -1,7 +1,7 @@
 let max_parallelism = 4 (** Maximum number of cores *)
 let seed = 123456 (** Seed for random tree gen. *)
-let size = 1000 (** Tree size *)
-let fun_time = 10. (** Time factor for mapped function, in ms *)
+let size = 10000 (** Tree size *)
+let iterations = 40000. (** Number of iterations *)
   
 
 (** Benchmark*)
@@ -16,7 +16,10 @@ let tree = gen_tree size
 
 let args = List.init max_parallelism (fun x -> x+1)
 
-let applied_fun x = Thread.delay (x *. fun_time /. 1_000_000.)
+let applied_fun x =
+  let r = ref 0 in
+  for _ = 0 to int_of_float (x *. iterations) do incr r done;
+  !r
 
 let bench_tree_sync name f = 
   Test.make_indexed ~name ~fmt:"%s %d"
