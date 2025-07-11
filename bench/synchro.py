@@ -36,7 +36,7 @@ for name, color, linestyle in names:
     error = [ sqrt(y * (1 - c)) for _, y, c in sort_data ]
     ymin = [ y-sqrt(y * (1 - c)) for _, y, c in sort_data ]
     ymax = [ y+sqrt(y * (1 - c)) for _, y, c in sort_data ]
-    # plt.fill_between(x, ymin, ymax, color=color, alpha=0.3)
+    plt.fill_between(x, ymin, ymax, color=color, alpha=0.3)
     plt.plot(x, y, linestyle=linestyle, label=name, color=color)
     # plt.errorbar(x, y, yerr=error,
     #              linestyle=linestyle, label=name, color=color,
@@ -46,14 +46,14 @@ for name, color, linestyle in names:
 
 plt.title('Map functions on a trees of 1000 elements')
     
-plt.xlabel('Busy loop iteration')
-plt.ylabel('Time compared to TMC')
+plt.xlabel('Number of iterations by busy loop')
+plt.ylabel('Time relative to TMC')
 plt.legend(loc='upper right')
 
 plt.xscale('log')
 # plt.yscale('log')
 plt.xlim(1000, 10**7)
-plt.ylim(0, 5)
+plt.ylim(0, 4)
 
 plt.grid()
 
