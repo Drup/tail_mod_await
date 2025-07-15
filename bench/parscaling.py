@@ -13,11 +13,11 @@ with open(sys.argv[1], 'r') as file:
 plt.figure()
 
 names = [
-    ("map_tmc", "black", "-"),
-    ("map_seq", "blue", "-"),
-    ("map_seq_tmca", "blue", "--"),
-    ("map_par_width", "red", "-"),
-    ("map_par_width_tmca", "red", "--"),
+    # ("map_tmc", "black", "-"),
+    # ("map_seq", "blue", "-"),
+    # ("map_seq_tmca", "blue", "--"),
+    # ("map_par_width", "red", "-"),
+    # ("map_par_width_tmca", "red", "--"),
     ("map_par_full", "green", "-"),
     ("map_par_full_tmca", "green", "--"),
     ]
@@ -40,17 +40,18 @@ for name, color, linestyle in names:
 
     
 x = numpy.linspace(1, 12, 100)
-y = 100/x
+y = data[0][1]/x
 plt.plot(x, y, linestyle='--', label='Ideal time (100/n)', color='black')
     
 plt.xlabel('Parallelism factor')
 plt.ylabel('Time relative to TMC (%)')
 plt.legend(loc='upper right')
 
-# plt.xscale('log')
+plt.yscale('log')
 plt.xlim(1, 12)
-plt.ylim(0, None)
-# plt.yticks(numpy.arange(0, maxtime, 1))
+# plt.ylim(0, None)
+plt.xticks(numpy.arange(1, 13, 1))
+plt.yticks(numpy.arange(10, 120, 10))
 
 plt.grid()
 
