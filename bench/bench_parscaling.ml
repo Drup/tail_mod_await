@@ -1,8 +1,11 @@
-let max_parallelism = 4 (** Maximum number of cores *)
+let max_parallelism = Domain.recommended_domain_count () (** Maximum number of cores *)
 let seed = 123456 (** Seed for random tree gen. *)
-let size = 10000 (** Tree size *)
-let iterations = 40000. (** Number of iterations *)
-  
+let size = 50000 (** Tree size *)
+let iterations = 50000. (** Number of iterations *)
+
+let () =
+  Fmt.pr "Configuration: %d domains, %d seed, %d tree size, %f iterations"
+    max_parallelism seed size iterations
 
 (** Benchmark*)
 open Bench_tree_map_common
@@ -32,8 +35,8 @@ let bench_tree_async name f =
     ~allocate:(fun i ->
         Moonpool.Ws_pool.create ~num_threads:i ()
       )
-    ~free:Moonpool.Ws_pool.shutdown
-    Test.multiple
+    ~free:Moonpool.Runner.shutdown
+    Test.uniq
     (fun _i ->
        Staged.stage @@ fun pool ->
        Moonpool.Runner.run_wait_block pool @@ fun () ->

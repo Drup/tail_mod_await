@@ -1,6 +1,10 @@
 let n_domains = 4 (** Degree of parallelism *)
 let seed = 123456 (** Seed for random tree gen. *)
-let size = 1000 (** Tree size *)
+let size = 10000 (** Tree size *)
+
+let () =
+  Fmt.pr "Configuration: %d domains, %d seed, %d tree size"
+    n_domains seed size
 
 (** Benchmark*)
 open Bench_tree_map_common
