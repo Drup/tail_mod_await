@@ -1,7 +1,7 @@
 let max_parallelism = Domain.recommended_domain_count () (** Maximum number of cores *)
 let seed = 123456 (** Seed for random tree gen. *)
 let size = 50000 (** Tree size *)
-let iterations = 50000. (** Number of iterations *)
+let iterations = 10000. (** Number of iterations *)
 
 let () =
   Fmt.pr "Configuration: %d domains, %d seed, %d tree size, %f iterations@."
@@ -46,14 +46,14 @@ let indexed_benchs =
   let test_tmc = bench_tree_sync "map_tmc" map_tmc in
   (* let test_seq = bench_tree_async "map_seq" map_seq in *)
   (* let test_seq_tmca = bench_tree_async "map_seq_tmca" map_seq_tmca in *)
-  (* let test_par_width = bench_tree_async "map_par_width" map_par_width in *)
-  (* let test_par_width_tmca = bench_tree_async "map_par_width_tmca" map_par_width_tmca in *)
+  let test_par_width = bench_tree_async "map_par_width" map_par_width in
+  let test_par_width_tmca = bench_tree_async "map_par_width_tmca" map_par_width_tmca in
   let test_par_full = bench_tree_async "map_par_full" map_par_full in
   let test_par_full_tmca = bench_tree_async "map_par_full_tmca" map_par_full_tmca in
   Test.make_grouped ~name:"tree bench" ~fmt:"%s %s"
     [ test_tmc;
       (* test_seq; test_seq_tmca; *)
-      (* test_par_width; test_par_width_tmca; *)
+      test_par_width; test_par_width_tmca; 
       test_par_full; test_par_full_tmca;
     ]
 
