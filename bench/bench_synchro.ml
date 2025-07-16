@@ -52,4 +52,6 @@ let main () =
   run_benchmark "synchro.raw.json" indexed_benchs;
   ()
 
-let () = Picos_mux_random.run_on ~n_domains main
+let () =
+  let pool = Moonpool.Ws_pool.create ~num_threads:n_domains () in
+  Moonpool.Runner.run_wait_block pool main

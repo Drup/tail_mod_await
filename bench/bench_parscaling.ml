@@ -1,7 +1,7 @@
 let max_parallelism = Domain.recommended_domain_count () (** Maximum number of cores *)
 let seed = 123456 (** Seed for random tree gen. *)
 let size = 50000 (** Tree size *)
-let iterations = 10000. (** Number of iterations *)
+let iterations = 20000. (** Number of iterations *)
 
 let () =
   Fmt.pr "Configuration: %d domains, %d seed, %d tree size, %f iterations@."
