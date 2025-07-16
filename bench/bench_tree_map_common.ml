@@ -82,7 +82,7 @@ open Bechamel
 let run_benchmark file benchs =
   let instances = [ Toolkit.Instance.monotonic_clock ] in
   let cfg =
-    Benchmark.cfg ~stabilize:false ~limit:1000 ~quota:(Time.second 10.) ()
+    Benchmark.cfg ~stabilize:true ~limit:1000 ~quota:(Time.second 10.) ()
   in
   let raw_results =
     Benchmark.all cfg instances benchs

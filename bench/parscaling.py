@@ -38,8 +38,9 @@ for name, color, linestyle in names:
     plt.fill_between(x, ymin, ymax, color=color, alpha=0.3)
     plt.plot(x, y, linestyle=linestyle, label=name, color=color)
 
+top = max(x)
     
-x = numpy.linspace(1, 12, 100)
+x = numpy.linspace(1, top, 100)
 y = data[0][1]/x
 plt.plot(x, y, linestyle='--', label='Ideal time (100/n)', color='black')
     
@@ -47,11 +48,11 @@ plt.xlabel('Parallelism factor')
 plt.ylabel('Time relative to TMC (%)')
 plt.legend(loc='upper right')
 
-plt.yscale('log')
-plt.xlim(1, 12)
+# plt.yscale('log')
+plt.xlim(1, top)
 # plt.ylim(0, None)
-plt.xticks(numpy.arange(1, 13, 1))
-plt.yticks(numpy.arange(10, 120, 10))
+plt.xticks(numpy.arange(1, top, 1))
+# plt.yticks(numpy.arange(10, 120, 10))
 
 plt.grid()
 
