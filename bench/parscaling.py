@@ -16,8 +16,8 @@ names = [
     # ("map_tmc", "black", "-"),
     # ("map_seq", "blue", "-"),
     # ("map_seq_tmca", "blue", "--"),
-    # ("map_par_width", "red", "-"),
-    # ("map_par_width_tmca", "red", "--"),
+    ("map_par_width", "red", "-"),
+    ("map_par_width_tmca", "red", "--"),
     ("map_par_full", "green", "-"),
     ("map_par_full_tmca", "green", "--"),
     ]
@@ -48,10 +48,10 @@ plt.xlabel('Parallelism factor')
 plt.ylabel('Time relative to TMC (%)')
 plt.legend(loc='upper right')
 
-# plt.yscale('log')
+plt.yscale('log')
 plt.xlim(1, top)
 # plt.ylim(0, None)
-plt.xticks(numpy.arange(1, top, 1))
+plt.xticks(numpy.arange(1, top+1, 1))
 # plt.yticks(numpy.arange(10, 120, 10))
 
 plt.grid()
