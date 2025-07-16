@@ -3,7 +3,7 @@ let seed = 123456 (** Seed for random tree gen. *)
 let size = 10000 (** Tree size *)
 
 let () =
-  Fmt.pr "Configuration: %d domains, %d seed, %d tree size"
+  Fmt.pr "Configuration: %d domains, %d seed, %d tree size@."
     n_domains seed size
 
 (** Benchmark*)

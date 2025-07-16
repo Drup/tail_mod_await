@@ -4,7 +4,7 @@ let size = 50000 (** Tree size *)
 let iterations = 50000. (** Number of iterations *)
 
 let () =
-  Fmt.pr "Configuration: %d domains, %d seed, %d tree size, %f iterations"
+  Fmt.pr "Configuration: %d domains, %d seed, %d tree size, %f iterations@."
     max_parallelism seed size iterations
 
 (** Benchmark*)
