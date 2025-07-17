@@ -18,8 +18,8 @@ names = [
     # ("map_seq_tmca", "blue", "--"),
     ("map_par_width", "red", "-"),
     ("map_par_width_tmca", "red", "--"),
-    ("map_par_full", "green", "-"),
-    ("map_par_full_tmca", "green", "--"),
+    # ("map_par_full", "green", "-"),
+    # ("map_par_full_tmca", "green", "--"),
     ]
 
 basetime = {elt["nb"]:elt["time"] for elt in json_data if elt["name"] == "tree bench map_tmc"}
@@ -32,23 +32,23 @@ for name, color, linestyle in names:
             for elt in json_data if elt["name"] == xname]
     sort_data = sorted(data, key=lambda d: d[0])
     x, y, _ = zip(*sort_data)
-    error = [ sqrt(y * (1 - c)) for _, y, c in sort_data ]
-    ymin = [ y-sqrt(y * (1 - c)) for _, y, c in sort_data ]
-    ymax = [ y+sqrt(y * (1 - c)) for _, y, c in sort_data ]
-    plt.fill_between(x, ymin, ymax, color=color, alpha=0.3)
+    # error = [ sqrt(y * (1 - c)) for _, y, c in sort_data ]
+    # ymin = [ y-sqrt(y * (1 - c)) for _, y, c in sort_data ]
+    # ymax = [ y+sqrt(y * (1 - c)) for _, y, c in sort_data ]
+    # plt.fill_between(x, ymin, ymax, color=color, alpha=0.3)
     plt.plot(x, y, linestyle=linestyle, label=name, color=color)
 
-top = max(x)
+top = 12
     
 x = numpy.linspace(1, top, 100)
 y = data[0][1]/x
-plt.plot(x, y, linestyle='--', label='Ideal time (100/n)', color='black')
+plt.plot(x, y, linestyle='dotted', label='Ideal time (1/n)', color='black')
     
 plt.xlabel('Parallelism factor')
 plt.ylabel('Time relative to TMC (%)')
 plt.legend(loc='upper right')
 
-plt.yscale('log')
+# plt.yscale('log')
 plt.xlim(1, top)
 # plt.ylim(0, None)
 plt.xticks(numpy.arange(1, top+1, 1))

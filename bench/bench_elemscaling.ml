@@ -13,31 +13,31 @@ open Bechamel
 
 let () = Random.init seed
 
-(* range from 10³ to 10⁶ elements, 5 points per order. *)
-let args = List.init 16 (fun x -> int_of_float (10. ** (float x/.5. +. 3.)))
+(* range from 10¹ to 10⁵ elements, 5 points per order. *)
+let args = List.init 21 (fun x -> int_of_float (10. ** (float x/.5. +. 1.)))
 let trees =
   List.map (fun i -> i, gen_tree i) args
   |> List.to_seq
   |> Hashtbl.of_seq
 
-let applied_fun i x =
+let applied_fun x =
   let r = ref 0 in
-  for _ = 0 to int_of_float (x *. float i) do incr r done;
+  for _ = 0 to int_of_float (x *. iterations) do incr r done;
   !r
 
 let bench_tree_sync name f = 
   Test.make_indexed ~name ~fmt:"%s %d"
     ~args
-    (fun i ->
+    (fun size ->
        Staged.stage @@ fun () ->
-       f (applied_fun i) @@ Hashtbl.find trees i)
+       f applied_fun @@ Hashtbl.find trees size)
 
 let bench_tree_async name f = 
   Test.make_indexed ~name ~fmt:"%s %d"
     ~args
-    (fun i ->
+    (fun size ->
        Staged.stage @@ fun () ->
-       Computation.await @@ f (applied_fun i) @@ Hashtbl.find trees i)
+       Computation.await @@ f applied_fun @@ Hashtbl.find trees size)
 
 let indexed_benchs =
   let test_tmc = bench_tree_sync "map_tmc" map_tmc in 
