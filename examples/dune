@@ -28,3 +28,11 @@
  )
  (modules read_files_icfp)
 )
+
+(executable
+ (name spanning_tree)
+ (preprocess (pps ppx_tmaa ppx_deriving.show))
+ (libraries picos_mux.fifo ocamlgraph
+ )
+ (modules spanning_tree)
+)
