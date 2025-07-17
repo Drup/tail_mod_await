@@ -25,7 +25,7 @@ names = [
 for name, color, linestyle in names:
     xname = "tree bench "+ name
     data = [( elt["nb"],
-              elt["time"],
+              elt["time"]/elt["nb"],
               elt["rsquare"] or 1)
             for elt in json_data if elt["name"] == xname]
     sort_data = sorted(data, key=lambda d: d[0])
@@ -37,13 +37,13 @@ for name, color, linestyle in names:
     plt.plot(x, y, linestyle=linestyle, label=name, color=color)
 
 plt.xlabel('Number of elements')
-plt.ylabel('Time per element')
+plt.ylabel('Time per element (ns)')
 plt.legend(loc='upper left')
 
-# plt.xscale('log')
-# plt.yscale('log')
-# plt.xlim(1000, None)
-# plt.ylim(0, None)
+plt.xscale('log')
+plt.yscale('log')
+plt.xlim(10, 10**5)
+plt.ylim(10**3, 10**5)
 
 plt.grid()
 

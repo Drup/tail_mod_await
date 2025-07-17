@@ -28,7 +28,7 @@ basetime = {elt["nb"]:elt["time"] for elt in json_data if elt["name"] == "tree b
 for name, color, linestyle in names:
     xname = "tree bench "+ name
     data = [( elt["nb"],
-              elt["time"]/basetime[elt["nb"]],
+              elt["time"],
               elt["rsquare"] or 1)
             for elt in json_data if elt["name"] == xname]
     sort_data = sorted(data, key=lambda d: d[0])
@@ -51,9 +51,9 @@ plt.ylabel('Time relative to TMC')
 plt.legend(loc='upper right')
 
 plt.xscale('log')
-# plt.yscale('log')
+plt.yscale('log')
 plt.xlim(1000, 10**7)
-plt.ylim(0, 4)
+# plt.ylim(0, 4)
 
 plt.grid()
 
