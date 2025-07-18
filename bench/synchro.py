@@ -28,7 +28,7 @@ basetime = {elt["nb"]:elt["time"] for elt in json_data if elt["name"] == "tree b
 for name, color, linestyle in names:
     xname = "tree bench "+ name
     data = [( elt["nb"],
-              elt["time"],
+              elt["time"]/10000,
               elt["rsquare"] or 1)
             for elt in json_data if elt["name"] == xname]
     sort_data = sorted(data, key=lambda d: d[0])
@@ -44,16 +44,16 @@ for name, color, linestyle in names:
     #              capsize=3,
     #              )
 
-plt.title('Map functions on a trees of 1000 elements')
+plt.title('Map functions on a tree of 10000 elements')
     
 plt.xlabel('Number of iterations by busy loop')
-plt.ylabel('Time relative to TMC')
-plt.legend(loc='upper right')
+plt.ylabel('Time per element (ns)')
+plt.legend(loc='best')
 
 plt.xscale('log')
 plt.yscale('log')
-plt.xlim(1000, 10**7)
-# plt.ylim(0, 4)
+plt.xlim(100, 10**7)
+plt.ylim(100, 10**7)
 
 plt.grid()
 

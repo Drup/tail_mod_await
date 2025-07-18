@@ -1,6 +1,6 @@
 let max_parallelism = Domain.recommended_domain_count () (** Maximum number of cores *)
 let seed = 123456 (** Seed for random tree gen. *)
-let size = 50000 (** Tree size *)
+let size = 10000 (** Tree size *)
 let iterations = 20000. (** Number of iterations *)
   
 let () =
