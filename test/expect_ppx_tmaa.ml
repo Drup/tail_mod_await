@@ -170,7 +170,15 @@ let expr_tests = List.map check_expr [
       let y = 2 in AsyncFun.fork (fun () -> f_dps dest__003_ x y)
     ];
 
-    "branching outside await", 
+    "branching + await", 
+    [%expr if b then A.await e else A.await (f x)],
+    [%expr
+      if b
+      then Destiny.chain e dest
+      else AsyncFun.fork (fun () -> f_dps dest x)
+    ];
+
+    "cons + branching + await", 
     [%expr A (if b then A.await (f x) else A.await e)],
     [%expr
       let dest__003_::[] =
@@ -183,7 +191,7 @@ let expr_tests = List.map check_expr [
       else Destiny.chain e dest__003_
     ];
 
-    "branching inside await", 
+    "cons + await + branching", 
     [%expr A (let x = 3 in A.await (if b then f x else e))],
     [%expr
       let dest__003_::[] =

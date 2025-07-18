@@ -95,29 +95,37 @@ class refiner modpath dps_funs = object (refiner)
   (** Top level call, assemble the call to {!Destiny.refine}. *)
   method refine dest e =
     let loc = {e.pexp_loc with loc_ghost = true} in
-    let value = match refiner#rewrite_cons e with
-      | Expression _ -> assert false
-      | Awaits f -> f dest
-      | Cons e -> e
-    in
+    let rewritten_e = refiner#rewrite_cons e in
     assert (List.length locations = List.length destinies);
-    if List.is_empty locations then
-      sequential_lets (List.rev bindings) @@
-      Ast.esequence ~loc (
-        Destiny.fill ~loc ~dest value ::
-        async_computations @
-        sync_computation)
-    else
-      let refine_binding =
-        let pat = Ast.plist ~loc (List.rev destinies) in
-        let expr =
-          sequential_lets (List.rev bindings) @@
-          Destiny.refine ~loc ~dest ~e:value ~locs:(List.rev locations)
+    let pre_computation_bindings =
+      sequential_lets (List.rev bindings)
+    and post_computation_sequence =
+      async_computations @ sync_computation
+    in
+    match rewritten_e with
+    | Expression e ->
+      pre_computation_bindings @@
+      Ast.esequence ~loc (e :: post_computation_sequence)
+    | Awaits f ->
+      pre_computation_bindings @@
+      Ast.esequence ~loc (f dest :: post_computation_sequence)
+    | Cons e ->
+      if List.is_empty locations then
+        pre_computation_bindings @@
+        Ast.esequence ~loc (
+          Destiny.fill ~loc ~dest e ::
+          post_computation_sequence)
+      else
+        let refine_binding = 
+          let pat = Ast.plist ~loc (List.rev destinies) in
+          let expr =
+            pre_computation_bindings @@
+            Destiny.refine ~loc ~dest ~e ~locs:(List.rev locations)
+          in
+          Ast.value_binding ~loc ~pat ~expr
         in
-        Ast.value_binding ~loc ~pat ~expr
-      in
-      Ast.pexp_let ~loc Nonrecursive [refine_binding] @@
-      Ast.esequence ~loc (async_computations @ sync_computation)
+        Ast.pexp_let ~loc Nonrecursive [refine_binding] @@
+        Ast.esequence ~loc post_computation_sequence
 
   (** Rewrite the constructor expression [e]. *)
   method rewrite_cons e0 =
