@@ -32,7 +32,7 @@
 (executable
  (name spanning_tree)
  (preprocess (pps ppx_tmaa ppx_deriving.show))
- (libraries picos_mux.fifo ocamlgraph
+ (libraries mtime.clock moonpool ocamlgraph
  )
  (modules spanning_tree)
 )
