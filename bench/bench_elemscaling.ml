@@ -13,8 +13,8 @@ open Bechamel
 
 let () = Random.init seed
 
-(* range from 10¹ to 10⁵ elements, 5 points per order. *)
-let args = List.init 21 (fun x -> int_of_float (10. ** (float x/.5. +. 1.)))
+(* range from 10¹ to 10⁶ elements, 5 points per order. *)
+let args = List.init 26 (fun x -> int_of_float (10. ** (float x/.5. +. 1.)))
 let trees =
   List.map (fun i -> i, gen_tree i) args
   |> List.to_seq

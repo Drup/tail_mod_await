@@ -1,6 +1,6 @@
 let n_domains = 4 (** Degree of parallelism *)
 let seed = 123456 (** Seed for random tree gen. *)
-let size = 10000 (** Tree size *)
+let size = 50000 (** Tree size *)
 
 let () =
   Fmt.pr "Configuration: %d domains, %d seed, %d tree size@."
