@@ -74,5 +74,5 @@ axR.legend(lines2, labels2, loc='upper right')
 plt.grid()
 
 plt.tight_layout()
-plt.show()
-# plt.savefig(sys.argv[1].replace("json","png"))
+# plt.show()
+plt.savefig(sys.argv[1].replace("json","png"))

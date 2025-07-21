@@ -61,5 +61,5 @@ plt.xticks(numpy.arange(1, top, 1))
 plt.grid()
 
 plt.tight_layout()
-plt.show()
-# plt.savefig(sys.argv[1].replace("json","png"))
+# plt.show()
+plt.savefig(sys.argv[1].replace("json","png"))

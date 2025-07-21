@@ -38,7 +38,7 @@ for name, color, linestyle in names:
 
 plt.xlabel('Number of elements')
 plt.ylabel('Time per element (ns)')
-plt.legend(loc='upper left')
+plt.legend(loc='upper right')
 
 plt.xscale('log')
 plt.yscale('log')
@@ -48,5 +48,5 @@ plt.ylim(10**3, 10**5)
 plt.grid()
 
 plt.tight_layout()
-plt.show()
-# plt.savefig(sys.argv[1].replace("json","png"))
+# plt.show()
+plt.savefig(sys.argv[1].replace("json","png"))
