@@ -5,7 +5,6 @@ open Graph
 
 (* A notion of graph *)
 module G = Pack.Digraph
-module H = Hashtbl.Make(G.V)
 
 (* A node picker, for initialisation. *)
 let pick_node g =
@@ -34,17 +33,15 @@ and spanning_forest_from g seen nexts =
   match nexts with
   | [] -> []
   | n :: t ->
-    if H.mem seen n then 
-      Computation.await (spanning_forest_from g seen t)
-    else begin
-      H.add seen n n;
+    if Saturn.Htbl.try_add seen n () then
       Computation.await (spanning_tree_from g seen n) ::
       Computation.await (spanning_forest_from g seen t)
-    end
+    else 
+      Computation.await (spanning_forest_from g seen t)
 [@@ocaml.warning "-32"]
 
 let spanning_tree g r =
-  let h = H.create (G.nb_vertex g) in
+  let h = Saturn.Htbl.create () in
   Computation.await (spanning_tree_from g h r)
 
 (** Sequential spanning tree *)
