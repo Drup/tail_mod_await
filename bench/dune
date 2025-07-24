@@ -1,9 +1,16 @@
 (executables
- (names bench_synchro bench_parscaling bench_elemscaling bench_scheduler)
- (preprocess (pps ppx_tmaa ppx_deriving.show))
- (libraries moonpool picos_mux.multififo picos_mux.random bechamel bechamel-js)
- (modules
-   bench_tree_map_common
+ (names
    bench_synchro bench_parscaling bench_elemscaling bench_scheduler
+   membench_trees
  )
+ (foreign_stubs (language c) (names instru_fiber))
+ (preprocess (pps ppx_tmaa ppx_deriving.show))
+ (libraries
+   moonpool
+   picos_mux.fifo
+   picos_mux.multififo
+   picos_mux.random
+   bechamel bechamel-js
+   multicore-magic picos_aux.mpscq)
 )
+

@@ -5,6 +5,12 @@ type 'a tree = N of 'a * 'a tree * 'a tree | L
 
 (** Map functions *)
 
+let rec map f t = match t with
+  | L -> L
+  | N (v , tl , tr ) ->
+    let y = f v in
+    N (y, map f tl, map f tr)
+
 let[@tail_mod_cons] rec map_tmc f t = match t with
   | L -> L
   | N (v , tl , tr ) ->
@@ -69,12 +75,32 @@ let%async rec map_par_full_tmca f t = match t with
 
 (** Tree generation *)
 
-let rec gen_tree size =
-  if size = 0 then L
-  else
-    let left = Random.int size in
-    let right = size - 1 - left in
-    N (Random.float 2., gen_tree left, gen_tree right)
+let rec cardinal = function
+  | L -> 0
+  | N(_, l, r) -> cardinal l + cardinal r + 1
+
+let rec height = function
+  | L -> 0
+  | N(_, l, r) -> 1 + max (height l) (height r)    
+
+let%async rec gen_tree wmax w size =
+  let n = Random.int 10 in
+  let temp_w = (!w * (100 + n))/100 in 
+  if temp_w >= wmax || !size <= 0 then (decr w; L)
+  else begin
+    decr size;
+    incr w;
+    let d = Random.float 2. in
+    N (d,
+       Computation.await (gen_tree wmax w size),
+       Computation.await (gen_tree wmax w size))
+  end
+
+let gen_tree size =
+  let t = Picos_mux_fifo.run @@ fun () ->
+    Computation.await @@ gen_tree 40 (ref 0) (ref size)
+  in
+  t
 
 (** Bechamel boilerplate *)
 open Bechamel
