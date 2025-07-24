@@ -35,15 +35,16 @@ let bench_tree_async name f =
     (fun i -> Staged.stage @@ fun () -> Computation.await @@ f (applied_fun i) tree)
 
 let indexed_benchs =
+  let test_naive = bench_tree_sync "map" map in 
   let test_tmc = bench_tree_sync "map_tmc" map_tmc in 
-  let test_seq = bench_tree_async "map_seq" map_seq in
-  let test_par_width = bench_tree_async "map_par_width" map_par_width in
-  let test_par_full = bench_tree_async "map_par_full" map_par_full in
-  let test_seq_tmca = bench_tree_async "map_seq_tmca" map_seq_tmca in
-  let test_par_width_tmca = bench_tree_async "map_par_width_tmca" map_par_width_tmca in
-  let test_par_full_tmca = bench_tree_async "map_par_full_tmca" map_par_full_tmca in
+  let test_seq = bench_tree_async "map_async" map_async in
+  let test_par_width = bench_tree_async "map_asyncpar_width" map_asyncpar_width in
+  let test_par_full = bench_tree_async "map_asyncpar_full" map_asyncpar_full in
+  let test_seq_tmca = bench_tree_async "map_async_tmca" map_async_tmca in
+  let test_par_width_tmca = bench_tree_async "map_asyncpar_width_tmca" map_asyncpar_width_tmca in
+  let test_par_full_tmca = bench_tree_async "map_asyncpar_full_tmca" map_asyncpar_full_tmca in
   Test.make_grouped ~name:"tree bench" ~fmt:"%s %s"
-    [ test_tmc;
+    [ test_naive; test_tmc;
       test_seq; test_par_width; test_par_full;
       test_seq_tmca; test_par_width_tmca; test_par_full_tmca;
     ]

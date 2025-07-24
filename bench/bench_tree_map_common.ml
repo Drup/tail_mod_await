@@ -24,54 +24,54 @@ let async e =
   Fiber.spawn fiber (fun _ -> Computation.return p @@ e ());
   p
 
-let rec map_seq f t = async @@ fun () -> match t with
+let rec map_async f t = async @@ fun () -> match t with
   | L -> L
   | N (v , tl , tr ) ->
     let y = f v in
-    let tl' = Computation.await (map_seq f tl) in
-    let tr' = Computation.await (map_seq f tr) in
+    let tl' = Computation.await (map_async f tl) in
+    let tr' = Computation.await (map_async f tr) in
     N (y, tl', tr')
 
-let rec map_par_width f t = async @@ fun () -> match t with
+let rec map_asyncpar_width f t = async @@ fun () -> match t with
   | L -> L
   | N (v , tl , tr ) ->
     let y = f v in
-    let task_tl = map_par_width f tl in
-    let task_tr = map_par_width f tr in
+    let task_tl = map_asyncpar_width f tl in
+    let task_tr = map_asyncpar_width f tr in
     N (y,
        Computation.await task_tl,
        Computation.await task_tr)
 
-let rec map_par_full f t = async @@ fun () -> match t with
+let rec map_asyncpar_full f t = async @@ fun () -> match t with
   | L -> L
   | N (v , tl , tr ) ->
-    let task_tl = map_par_full f tl in
-    let task_tr = map_par_full f tr in
+    let task_tl = map_asyncpar_full f tl in
+    let task_tr = map_asyncpar_full f tr in
     N (f v,
        Computation.await task_tl,
        Computation.await task_tr)
 
-let%async rec map_seq_tmca f t = match t with
+let%async rec map_async_tmca f t = match t with
   | L -> L
   | N (v , tl , tr ) ->
     let y = f v in
-    let tl' = Computation.await (map_seq_tmca f tl) in
-    N (y, tl', Computation.await (map_seq_tmca f tr))
+    let tl' = Computation.await (map_async_tmca f tl) in
+    N (y, tl', Computation.await (map_async_tmca f tr))
 
-let%async rec map_par_width_tmca f t = match t with
+let%async rec map_asyncpar_width_tmca f t = match t with
   | L -> L
   | N (v , tl , tr ) ->
     let y = f v in
     N (y,
-       Computation.await (map_par_width_tmca f tl),
-       Computation.await (map_par_width_tmca f tr))
+       Computation.await (map_asyncpar_width_tmca f tl),
+       Computation.await (map_asyncpar_width_tmca f tr))
 
-let%async rec map_par_full_tmca f t = match t with
+let%async rec map_asyncpar_full_tmca f t = match t with
   | L -> L
   | N (v , tl , tr ) ->
     N (f v,
-       Computation.await (map_par_full_tmca f tl),
-       Computation.await (map_par_full_tmca f tr))
+       Computation.await (map_asyncpar_full_tmca f tl),
+       Computation.await (map_asyncpar_full_tmca f tr))
 
 (** Tree generation *)
 

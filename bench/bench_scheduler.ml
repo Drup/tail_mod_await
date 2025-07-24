@@ -74,10 +74,10 @@ let bench_moonpool_fifo name f =
 let indexed_benchs =
   Test.make_grouped ~name:"tree bench" ~fmt:"%s %s"
     [ bench_tree_sync "map_tmc" map_tmc;
-      bench_picos_multififo "map_par_tmca" map_par_full_tmca;
-      bench_picos_random "map_par_tmca" map_par_full_tmca;
-      bench_moonpool_ws "map_par_tmca" map_par_full_tmca;
-      bench_moonpool_fifo "map_par_tmca" map_par_full_tmca;
+      bench_picos_multififo "map_asyncpar_tmca" map_asyncpar_full_tmca;
+      bench_picos_random "map_asyncpar_tmca" map_asyncpar_full_tmca;
+      bench_moonpool_ws "map_asyncpar_tmca" map_asyncpar_full_tmca;
+      bench_moonpool_fifo "map_asyncpar_tmca" map_asyncpar_full_tmca;
     ]
 
 let main () =

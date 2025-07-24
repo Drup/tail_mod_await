@@ -371,28 +371,28 @@ let main () =
     map_tmc f t
   in
   let _ =
-    Memmeasure.run "map_seq" @@ fun () ->
-    Computation.await @@ map_seq f t
+    Memmeasure.run "map_async" @@ fun () ->
+    Computation.await @@ map_async f t
   in
   let _ =
-    Memmeasure.run "map_seq_tmca" @@ fun () ->
-    Computation.await @@ map_seq_tmca f t
+    Memmeasure.run "map_async_tmca" @@ fun () ->
+    Computation.await @@ map_async_tmca f t
   in
   let _ =
-    Memmeasure.run "map_par_width" @@ fun () ->
-    Computation.await @@ map_par_width f t
+    Memmeasure.run "map_asyncpar_width" @@ fun () ->
+    Computation.await @@ map_asyncpar_width f t
   in
   let _ =
-    Memmeasure.run "map_par_width_tmca" @@ fun () ->
-    Computation.await @@ map_par_width_tmca f t
+    Memmeasure.run "map_asyncpar_width_tmca" @@ fun () ->
+    Computation.await @@ map_asyncpar_width_tmca f t
   in
   let _ =
-    Memmeasure.run "map_par_full" @@ fun () ->
-    Computation.await @@ map_par_full f t
+    Memmeasure.run "map_asyncpar_full" @@ fun () ->
+    Computation.await @@ map_asyncpar_full f t
   in
   let _ =
-    Memmeasure.run "map_par_full_tmca" @@ fun () ->
-    Computation.await @@ map_par_full_tmca f t
+    Memmeasure.run "map_asyncpar_full_tmca" @@ fun () ->
+    Computation.await @@ map_asyncpar_full_tmca f t
   in
   ()
 
