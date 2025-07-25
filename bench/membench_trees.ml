@@ -339,12 +339,12 @@ module Memmeasure = struct
     let x = Scheduler.run f in
     Gc.full_major ();
     Gc.delete_alarm _alarm;
-    Format.printf "Peak Memory: %iKB@.%!" (!m.peak_words/(1024));
-    Format.printf "Peak Main Stack: %i@.%!" (!m.peak_main_stack);
-    Format.printf "Peak Stack: %i@.%!" (!m.peak_stacks);
-    Format.printf "Peak Total: %iMB@.%!" ((!m.peak_stacks + !m.peak_words)/(1024 * 1024));
+    Format.printf "Peak Memory: %iKB@.%!" (!m.peak_words/1024);
     Format.printf "Allocated Memory: %fKB@.%!"
       ((total_allocated () -. init_allocated) /. (1024.));
+    Format.printf "Peak Main Stack: %i@.%!" (!m.peak_main_stack);
+    Format.printf "Peak Stack: %i@.%!" (!m.peak_stacks);
+    Format.printf "Peak Total: %iKB@.%!" ((!m.peak_stacks + !m.peak_words)/1024);
     x
 
 end
@@ -356,12 +356,12 @@ let main () =
     for _ = 0 to int_of_float (x *. 100000.) do incr r done;
     !r
   in
-  let size = 100000 in
+  let size = 1000000 in
   let t = gen_tree size in
   Format.printf "Size: %i, Height: %i@.%!"
     (cardinal t) (height t);
-  Format.printf "Data size: %iMB@.%!"
-    (Obj.reachable_words (Obj.repr t) / (1024 * 1024));
+  Format.printf "Data size: %iKB@.%!"
+    (Obj.reachable_words (Obj.repr t) / 1024);
   let _ =
     Memmeasure.run "map" @@ fun () ->
     map f t
