@@ -20,8 +20,8 @@ names = [
     # ("map_async_tmca", "blue", "--"),
     ("map_asyncpar_width", "red", "-"),
     ("map_asyncpar_width_tmca", "red", "--"),
-    # ("map_asyncpar_full", "green", "-"),
-    # ("map_asyncpar_full_tmca", "green", "--"),
+    ("map_asyncpar_full", "green", "-"),
+    ("map_asyncpar_full_tmca", "green", "--"),
     ]
 
 
@@ -44,7 +44,7 @@ for name, color, linestyle in names:
     sort_data = sorted(data, key=lambda d: d[0])
     xx, _, _ = zip(*sort_data)
     time = [ y for _,y,_ in sort_data ]
-    overhead = [ y*x/baseline*100 for x,y,_ in sort_data ]
+    overhead = [ y*x/baseline*100-100 for x,y,_ in sort_data ]
     # error = [ sqrt(y * (1 - c)) for _, y, c in sort_data ]
     # ymin = [ y-sqrt(y * (1 - c)) for _, y, c in sort_data ]
     # ymax = [ y+sqrt(y * (1 - c)) for _, y, c in sort_data ]
@@ -60,12 +60,12 @@ plt.xticks(numpy.arange(1, top+1, 1))
 
 axL.set_yscale('log')
 axL.set_ylabel('Time per element (ns)')
-axL.set_ylim(1000, 10**5)
+axL.set_ylim(1000, 2*10**4)
 lines, labels = axL.get_legend_handles_labels()
 axL.legend(lines, labels, loc='upper left')
 
 axR.set_ylabel('Overhead relative to ideal speedup (%)')
-axR.set_ylim(0, 180)
+axR.set_ylim(0, 90)
 lines2, labels2 = axR.get_legend_handles_labels()
 axR.legend(lines2, labels2, loc='lower right')
 
