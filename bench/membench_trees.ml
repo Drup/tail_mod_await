@@ -483,14 +483,15 @@ module Memmeasure = struct
   
   let run title f =
     let _alarm = Gc.create_alarm update_memory in
-    let total_allocated () =
+    Format.printf "Running %s@.%!" title;
+    Gc.compact ();
+    reset_monitor ();
+    let measure () =
       let s0 = Gc.quick_stat () in
+      s0.live_words, 
       s0.minor_words +. s0.major_words -. s0.promoted_words
     in
-    Format.printf "Running %s@.%!" title;
-    Gc.full_major ();
-    reset_monitor ();
-    let init_allocated = total_allocated () in
+    let _init_live, init_allocated = measure () in
     let init_stack, x = Scheduler.run_on ~n_domains:4 @@ fun () ->
       let n = Effect.perform Stack_size in
       let x = f () in
@@ -498,16 +499,22 @@ module Memmeasure = struct
     in
     Gc.full_major ();
     Gc.delete_alarm _alarm;
-    Format.printf "Peak Memory: %i KB@.%!" (!m.peak_words/1024);
-    Format.printf "Allocated Memory: %.0f KB@.%!"
-      ((total_allocated () -. init_allocated) /. (1024.));
-    Format.printf "Peak Main Stack: %i B@.%!" (!m.peak_main_stack - init_stack);
-    Format.printf "Peak Stack: %i B@.%!" (!m.peak_stacks - init_stack);
-    Format.printf "Peak Total: %i KB@.@.%!" ((!m.peak_stacks + !m.peak_words)/1024);
+    let _final_live, final_allocated = measure () in
+    Format.printf "Peak Memory: %.1f MB@.%!"
+      ((float !m.peak_words -. float _init_live)/.1024./.1024.);
+    Format.printf "Allocated Memory: %.1f MB@.%!"
+      ((final_allocated -. init_allocated) /.1024./.1024.);
+    Format.printf "Peak Main Stack: %f MB@.%!"
+      ((float !m.peak_main_stack -. float init_stack)/.1024./.1024.);
+    Format.printf "Peak Stack: %f MB@.%!"
+      ((float !m.peak_stacks -. float init_stack)/.1024./.1024.);
+    Format.printf "Peak Total: %.1f MB@.@.%!"
+      ((float !m.peak_stacks +. float !m.peak_words)/.1024./.1024.);
     x
 
 end
-  
+
+ 
 let main () =
   let iterations = 100000. in
   let f x =
@@ -520,8 +527,8 @@ let main () =
   let t = gen_tree size in
   Format.printf "Tree Size: %i, Tree Height: %i@.%!"
     (cardinal t) (height t);
-  Format.printf "Data size: %i KB@.%!"
-    (Obj.reachable_words (Obj.repr t) / 1024);
+  Format.printf "Data size: %.1f MB@.%!"
+    (float (Obj.reachable_words (Obj.repr t)) /.1024./.1024.);
   Format.printf "Task Size: %.0f average iterations@.%!"
     iterations;
   let _ =
