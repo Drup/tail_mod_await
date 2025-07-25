@@ -14,16 +14,13 @@ plt.figure()
 
 names = [
     ("map_tmc", "black", "-"),
-    ("map_seq", "red", "-"),
-    ("map_seq_tmca", "red", "--"),
-    ("map_par_width", "blue", "-"),
-    ("map_par_width_tmca", "blue", "--"),
-    ("map_par_full", "green", "-"),
-    ("map_par_full_tmca", "green", "--"),
+    ("map_async", "red", "-"),
+    ("map_async_tmca", "red", "--"),
+    ("map_asyncpar_width", "blue", "-"),
+    ("map_asyncpar_width_tmca", "blue", "--"),
+    ("map_asyncpar_full", "green", "-"),
+    ("map_asyncpar_full_tmca", "green", "--"),
     ]    
-
-
-basetime = {elt["nb"]:elt["time"] for elt in json_data if elt["name"] == "tree bench map_tmc"}
 
 for name, color, linestyle in names:
     xname = "tree bench "+ name
@@ -44,7 +41,7 @@ for name, color, linestyle in names:
     #              capsize=3,
     #              )
 
-plt.title('Map functions on a tree of 10000 elements')
+plt.title('Map functions on a tree of 10000 elements on 4 CPUs')
     
 plt.xlabel('Number of iterations by busy loop')
 plt.ylabel('Time per element (ns)')

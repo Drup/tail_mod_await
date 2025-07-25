@@ -16,37 +16,34 @@ axR = axL.twinx()
 
 names = [
     # ("map_tmc", "black", "-"),
-    # ("map_seq", "blue", "-"),
-    # ("map_seq_tmca", "blue", "--"),
-    # ("map_par_width", "red", "-"),
-    # ("map_par_width_tmca", "red", "--"),
-    ("map_par_full", "green", "-"),
-    ("map_par_full_tmca", "green", "--"),
+    # ("map_async", "blue", "-"),
+    # ("map_async_tmca", "blue", "--"),
+    ("map_asyncpar_width", "red", "-"),
+    ("map_asyncpar_width_tmca", "red", "--"),
+    # ("map_asyncpar_full", "green", "-"),
+    # ("map_asyncpar_full_tmca", "green", "--"),
     ]
 
 
-basetime = {elt["nb"]:elt["time"] for elt in json_data if elt["name"] == "tree bench map_par_full_tmca"}
+basetime = {elt["nb"]:elt["time"]/10000 for elt in json_data if elt["name"] == "tree bench map_asyncpar_width_tmca"}
 
 baseline = basetime[1]
-
-tmc = {elt["nb"]:elt["time"] for elt in json_data if elt["name"] == "tree bench map_par_full_tmca"}
 
 top = 12
 
 ideal_x = numpy.linspace(1, top, 100)
-ideal_y = basetime[1]/tmc[1]*100/ideal_x
+ideal_y = baseline/ideal_x
 axL.plot(ideal_x, ideal_y, linestyle='dotted', label='Ideal time (1/n)', color='black')
-    
 
 for name, color, linestyle in names:
     xname = "tree bench "+ name
     data = [( elt["nb"],
-              elt["time"],
+              elt["time"]/10000,
               elt["rsquare"] or 1)
             for elt in json_data if elt["name"] == xname]
     sort_data = sorted(data, key=lambda d: d[0])
     xx, _, _ = zip(*sort_data)
-    time = [ y/tmc[1]*100 for x,y,_ in sort_data ]
+    time = [ y for _,y,_ in sort_data ]
     overhead = [ y*x/baseline*100 for x,y,_ in sort_data ]
     # error = [ sqrt(y * (1 - c)) for _, y, c in sort_data ]
     # ymin = [ y-sqrt(y * (1 - c)) for _, y, c in sort_data ]
@@ -55,21 +52,22 @@ for name, color, linestyle in names:
     axL.plot(xx, time, linestyle=linestyle, label=name, color=color)
     axR.plot(xx, overhead, linestyle=linestyle, label=(name+" Overhead"), color=color, marker=".")
     
+plt.title('Map functions on a tree of 10000 elements with a busy loop of 20000')
 
 plt.xlabel('Parallelism factor')
 plt.xlim(1,top)
 plt.xticks(numpy.arange(1, top+1, 1))
 
 axL.set_yscale('log')
-axL.set_ylabel('Time relative to TMC (%)')
-# axL.set_ylim(1, 110)
+axL.set_ylabel('Time per element (ns)')
+axL.set_ylim(1000, 10**5)
 lines, labels = axL.get_legend_handles_labels()
 axL.legend(lines, labels, loc='upper left')
 
 axR.set_ylabel('Overhead relative to ideal speedup (%)')
-axR.set_ylim(0, 150)
+axR.set_ylim(0, 180)
 lines2, labels2 = axR.get_legend_handles_labels()
-axR.legend(lines2, labels2, loc='upper right')
+axR.legend(lines2, labels2, loc='lower right')
 
 plt.grid()
 

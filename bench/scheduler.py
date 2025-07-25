@@ -14,24 +14,21 @@ plt.figure()
 
 names = [
     # ("map_tmc", "black", "-"),
-    # ("map_seq", "blue", "-"),
-    # ("map_seq_tmca", "blue", "--"),
-    # ("map_par_width", "red", "-"),
-    # ("map_par_width_tmca", "red", "--"),
-    # ("map_par_full", "green", "-"),
-    ("picos random map_par_tmca", "green", "--"),
-    ("picos multififo map_par_tmca", "red", "--"),
-    ("moonpool ws map_par_tmca", "blue", "--"),
-    ("moonpool fifo map_par_tmca", "orange", "--"),
+    # ("map_async", "blue", "-"),
+    # ("map_async_tmca", "blue", "--"),
+    # ("map_asyncpar_width", "red", "-"),
+    # ("map_asyncpar_width_tmca", "red", "--"),
+    # ("map_asyncpar_full", "green", "-"),
+    ("picos random map_asyncpar_tmca", "green", "--"),
+    ("picos multififo map_asyncpar_tmca", "red", "--"),
+    ("moonpool ws map_asyncpar_tmca", "blue", "--"),
+    ("moonpool fifo map_asyncpar_tmca", "orange", "--"),
     ]
-
-basetime = {elt["nb"]:elt["time"] for elt in json_data if elt["name"] == "tree bench map_tmc"}
 
 for name, color, linestyle in names:
     xname = "tree bench "+ name
     data = [( elt["nb"],
-              elt["time"]/basetime[elt["nb"]]*100
-              ,
+              elt["time"]/10000,
               elt["rsquare"] or 1)
             for elt in json_data if elt["name"] == xname]
     sort_data = sorted(data, key=lambda d: d[0])
@@ -49,7 +46,7 @@ y = data[0][1]/x
 plt.plot(x, y, linestyle='--', label='Ideal time (100/n)', color='black')
     
 plt.xlabel('Parallelism factor')
-plt.ylabel('Time relative to TMC (%)')
+plt.ylabel('Time per element (ns)')
 plt.legend(loc='upper right')
 
 # plt.yscale('log')
