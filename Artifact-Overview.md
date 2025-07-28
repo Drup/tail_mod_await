@@ -186,3 +186,12 @@ opam exec --switch memtrace_viewer -- memtrace-viewer trace.ctf
 It will open a web-based UI, accessible at [localhost:8080](localhost:8080) on your host machine, where you can observe the graph on the left.
 It should look exactly like figure 31. In particular, all peaks should not be above the first peak, indicating they don't consume extra memory than
 the Tail-Modulo-Cons variant.
+
+
+### Case study benchmark
+
+Corresponds to section <TODO> of the paper. Run the benchmark with:
+
+```
+dune exec malfunction/bench/bench.exe
+```
