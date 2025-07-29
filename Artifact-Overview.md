@@ -122,7 +122,7 @@ This allow to observe in a more isolated fashion the code and its transformation
 
 ### Performance measurements
 
-This correspond to the paragraph "<TODO>" in Section 4.3.
+This correspond to the paragraph "Time measurements" in Section 4.3.
 
 Benchmarks are available in the [bench/](bench/) directory.
 The script [bench/runbench.sh](bench/runbench.sh) runs various
