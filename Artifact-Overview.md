@@ -24,8 +24,6 @@ Current limitation of our prototype implementation:
 - Location in error messages might be imprecise.
 - Mutually recursive functions have not been rigourously tested.
 
-Note that the paper is in Major revision, and that most of the requirements for revision relates to Experimental Evaluation, which is likely to change significantly in the next version. The core implementation is unlikely to change.
-
 ## Hardware dependencies
 
 For basic usage of the artifact: None.
@@ -37,18 +35,11 @@ For memory benchmark: Need Linux.
 - Opam
 - OCaml 5.3
 
-For performance benchmark:
+For benchmarks:
 
 - jq
 - python
 - mathplotlib
-
-For memory benchmark:
-
-- An alternative switch with ocaml 5.1
-- Linux
-- A web browser
-- gmp
 
 ## Getting Started
 
@@ -60,7 +51,6 @@ With opam installed (takes around 10 minutes):
 opam switch create ocaml.5.3.0 # Create a fresh OCaml switch
 eval $(opam env) # enable the new switch
 opam install --deps --with-test path/to/artifact # Install all the dependencies
-opam switch create --no-switch memtrace_viewer --packages ocaml.5.1.1,codicons,memtrace_viewer.v0.17.0 # Alternative switch for memory viewer
 ```
 
 Exact dependencies can be found in [ppx_tmaa.opam](ppx_tmaa.opam).
@@ -73,7 +63,7 @@ To run it:
 
 ```
 docker load < tail-mod-await-image.tar.gz
-docker run -p 8080:8080 -it tail-mod-await-image:latest
+docker run -it tail-mod-await-image:latest
 ```
 
 ### Basic Usage
@@ -132,66 +122,48 @@ This allow to observe in a more isolated fashion the code and its transformation
 
 ### Performance measurements
 
-This correspond to the paragraph "What is the effect of Tail-Modulo-Cons-Await on performances and parallelism?" in Section 4.3.
+This correspond to the paragraph "<TODO>" in Section 4.3.
 
 Benchmarks are available in the [bench/](bench/) directory.
-The script [bench/bench_tree.ml](bench/bench_tree.ml) runs various
+The script [bench/runbench.sh](bench/runbench.sh) runs various
 `Tree.map` implementations in various contexts. See the paper for a description
-of all the functions.
-One can adjust the degree of parallelism by modifying the `n_domains` variable
-at the beginning of the file. It is 4 by default.
-
-You can run it with:
+of all the functions. It is run by
 
 ```
-make bench
+sh bench/runbench.sh
 ```
 
-It is expected to take between 5 and 10 minutes.
+These benchmarks are currently configured for a 12-core machine with 32GB of RAM, and are expected
+to take several hours to run. The number of parallel domains and size of the test cases can be
+adapted at the top of each `.ml` file of the different benchmarks
 
-It outputs two graphs:
-- `short.png` corresponding to figure 32.a.
-  It maps a quick function. This allow to test the influence of synchronisation.
-- `long.png` corresponding to figure 32.b.
-  It maps a long function. This allows to observe parallelism.
 
-One should observe that:
-- Dashed lines (with our transformation) are equivalent or below plain lines.
-- The black `map_tmc` function, which is the non-async implementation of map
-  is much faster in the `short` case (as there is no synchronisation).
-- The various `_par` benefits from parallelism: they run faster by a factor
-of `n_domains` (4 by default).
+After the benchmarks are done, the results can be compiled into graphs using
+[bench/processdata.sh](bench/processdata.sh), outputing three graphs:
+- `synchro.png` corresponding to figure 33,
+- `parscaling.png` corresponding to figure 34,
+- `elemscaling.png` corresponding to figure 35.
+
+```
+sh bench/processdata.sh
+```
+
+Full explanations of these results can be found in the paper
+
 
 ### Memory measurements
 
-This correspond to the paragraph "What is the effect of Tail-Modulo-Cons-Await on memory consumption?" in Section 4.3.
+This correspond to the paragraph "Memory consumption" in Section 4.3.
 
-The goal of this section is to reproduce Figure 31, which indicates
-*memory* measurements of various runs of `map` on lists.
+The goal of this section is to reproduce the data in Figure 32, which indicates
+*memory* measurements of various runs of `map` on trees.
 
-First run the benchmark with memory tracing to produce a file `trace.ctf`
-
-```
-make benchmem
-```
-
-Unfortunately, the viewer for such trace files requires an old OCaml version.
-We strongly recommend you use the provided Docker.
-Assuming the correct switch with `memtrace_viewer` is installed (either manually via the setup above, or thanks to our Docker), run the following command:
+These results are produced by running
 
 ```
-opam exec --switch memtrace_viewer -- memtrace-viewer trace.ctf
+make membench
 ```
 
-It will open a web-based UI, accessible at [localhost:8080](localhost:8080) on your host machine, where you can observe the graph on the left.
-It should look exactly like figure 31. In particular, all peaks should not be above the first peak, indicating they don't consume extra memory than
-the Tail-Modulo-Cons variant.
+and printed on Stdout
 
 
-### Case study benchmark
-
-Corresponds to section <TODO> of the paper. Run the benchmark with:
-
-```
-dune exec malfunction/bench/bench.exe
-```

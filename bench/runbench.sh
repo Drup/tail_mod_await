@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 echo "System Information"
 
@@ -11,7 +11,6 @@ echo "Building"
 dune build ./bench/bench_synchro.exe
 dune build ./bench/bench_elemscaling.exe
 dune build ./bench/bench_parscaling.exe
-dune build ./bench/bench_scheduler.exe
 
 echo "Running"
 
@@ -26,10 +25,6 @@ echo "Done Elescaling"
 echo "Running Parscaling"
 dune exec ./bench/bench_parscaling.exe
 echo "Done Parscaling"
-
-echo "Running Scheduler"
-dune exec ./bench/bench_scheduler.exe
-echo "Done Scheduler"
 
 echo "Available files:"
 ls *.json

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 for f in *.raw.json; do
     echo "Loading file $f"

@@ -12,12 +12,6 @@ WORKDIR tail_mod_await/
 
 RUN opam install --deps --with-test . && eval $(opam env)
 
-RUN opam switch create --no-switch memtrace_viewer --packages ocaml.5.1.1,codicons,memtrace_viewer.v0.17.0
-
-RUN opam install ./malfunction --deps --with-test
-
-RUN opam install .
-
 ENTRYPOINT ["opam", "exec", "--"]
 
 CMD bash

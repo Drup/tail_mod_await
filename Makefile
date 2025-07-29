@@ -17,14 +17,6 @@ clean:
 doc:
 	dune build @doc
 
-.PHONY: bench
-bench:
-	dune exec ./bench/bench_tree.exe
-	jq -f bench/extract_from_bechamel.jq short.raw.json > short.json
-	jq -f bench/extract_from_bechamel.jq long.raw.json > long.json
-	python bench/multiseries.py short.json
-	python bench/multiseries.py long.json
-
-.PHONY: benchmem
-benchmem:
-	MEMTRACE=trace.ctf dune exec examples/no_stack.exe
+.PHONY: membench
+membench:
+	dune exec ./bench/membench_trees.exe

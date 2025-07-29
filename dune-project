@@ -23,4 +23,5 @@
   (bechamel :with-test)
   (bechamel-js :with-test)
   (memtrace :with-test)
+  (moonpool :with-test)
 ))
