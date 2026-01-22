@@ -4,6 +4,8 @@ module Ast = Ast_builder.Default
 
 module DpsFuns = Map.Make(String)
 
+let (let@) = (@@)
+
 (** Reified module {!Ppx_tmaa_runtime.Loc}. *)
 module Loc = struct
   let mk ~loc e i = 
@@ -25,6 +27,9 @@ module Destiny = struct
 
   let chain ~loc ~dest e =
     [%expr Ppx_tmaa_runtime.Destiny.chain [%e e] [%e dest]]
+
+  let memo ~loc ~dest ~key ~f =
+    [%expr Ppx_tmaa_runtime.Destiny.memo [%e dest] [%e key] [%e f]]
 end
 
 let rec sequential_lets vbs body = match vbs with
@@ -50,14 +55,20 @@ let gen_var ~loc ~prefix () =
 let fresh_dest loc = 
   gen_var ~loc ~prefix:"dest" ()
 
-let with_new_dest expr f =
+type context_info = {
+  dest : expression ;
+  memo_key : expression option ;
+  memo_tbl : expression option ;
+}
+let fresh_ctx loc =
+  let pat, dest = fresh_dest loc in
+  pat, {memo_key = None; memo_tbl = None; dest}
+  
+let with_new_dest ctx expr f =
   let loc = { expr.pexp_loc with loc_ghost = true } in
   let dest_pat, dest = fresh_dest loc in
   let vb = Ast.(value_binding ~loc ~pat:dest_pat ~expr) in
-  Ast.(pexp_let ~loc Nonrecursive [vb] @@ f dest)
-
-let dps_function_name =
-  Ast.Located.map (fun orig -> orig ^ "$dps")
+  Ast.(pexp_let ~loc Nonrecursive [vb] @@ f {ctx with dest})
 
 (** A subterm of a constructor. *)
 type subterm =
@@ -79,12 +90,12 @@ let map_subterm_if_awaits e0 f sub = match sub with
   | Expression _ | Cons _ -> Expression e0
   | Awaits mke -> Awaits (fun x -> f @@ mke x)
 
-(** A [refiner] turns a constructor in terminal position into a call to refine.
+(** Transform the expression in tail position, given a [context_info].
 
     Should only be called by:
-    [(new refiner modpath dps_funs)#refiner dest e].
+    [(new refiner modpath dps_funs)#refiner ctx e].
 *)
-class refiner modpath dps_funs = object (refiner)
+class tail_position modpath dps_funs = object (refiner)
 
   val mutable bindings : value_binding list = []
   val mutable locations : expression list = []
@@ -93,7 +104,7 @@ class refiner modpath dps_funs = object (refiner)
   val mutable sync_computation : expression list = []
 
   (** Top level call, assemble the call to {!Destiny.refine}. *)
-  method refine dest e =
+  method refine ctx e =
     let loc = {e.pexp_loc with loc_ghost = true} in
     let rewritten_e = refiner#rewrite_cons e in
     assert (List.length locations = List.length destinies);
@@ -102,30 +113,32 @@ class refiner modpath dps_funs = object (refiner)
     and post_computation_sequence =
       async_computations @ sync_computation
     in
-    match rewritten_e with
-    | Expression e ->
+    match rewritten_e, locations with
+    | Expression e, _ ->
       pre_computation_bindings @@
-      Ast.esequence ~loc (e :: post_computation_sequence)
-    | Awaits f ->
+      Ast.esequence ~loc (
+        e ::
+        post_computation_sequence)
+    | Cons e, [] ->
       pre_computation_bindings @@
-      Ast.esequence ~loc (f dest :: post_computation_sequence)
-    | Cons e ->
-      if List.is_empty locations then
-        pre_computation_bindings @@
-        Ast.esequence ~loc (
-          Destiny.fill ~loc ~dest e ::
-          post_computation_sequence)
-      else
-        let refine_binding = 
-          let pat = Ast.plist ~loc (List.rev destinies) in
-          let expr =
-            pre_computation_bindings @@
-            Destiny.refine ~loc ~dest ~e ~locs:(List.rev locations)
-          in
-          Ast.value_binding ~loc ~pat ~expr
+      Ast.esequence ~loc (
+        Destiny.fill ~loc ~dest:ctx.dest e ::
+        post_computation_sequence)
+    | Awaits f, _ ->
+      pre_computation_bindings @@
+      Ast.esequence ~loc (f ctx.dest :: post_computation_sequence)
+    | Cons e, _ ->
+      let refine_binding = 
+        let pat = Ast.plist ~loc (List.rev destinies) in
+        let expr =
+          pre_computation_bindings @@
+          Destiny.refine ~loc ~dest:ctx.dest ~e
+            ~locs:(List.rev locations)
         in
-        Ast.pexp_let ~loc Nonrecursive [refine_binding] @@
-        Ast.esequence ~loc post_computation_sequence
+        Ast.value_binding ~loc ~pat ~expr
+      in
+      Ast.pexp_let ~loc Nonrecursive [refine_binding] @@
+      Ast.esequence ~loc post_computation_sequence
 
   (** Rewrite the constructor expression [e]. *)
   method rewrite_cons e0 =
@@ -338,15 +351,18 @@ class refiner modpath dps_funs = object (refiner)
       Destiny.chain ~loc e ~dest
 end
 
-(** Transformation to destiny passing style.
+(** Traversing expressions until reaching a tail position.
 
-    Take as argument the module path pointing to a Promise module. *)
-let rewrite_dps modpath dps_funs =
+    Accumulates some [context_info] on the way.
+*)
+
+(* Take as argument the module path pointing to a Promise module. *)
+let traverse_tail modpath dps_funs =
   object (self)
     (* Context is the destiny of the computation *)
-    inherit [_] Ast_traverse.map_with_context as _super
+    inherit [context_info] Ast_traverse.map_with_context as _super
 
-    method! expression dest e0 =
+    method! expression ctx e0 =
       let loc = e0.pexp_loc in
       match e0.pexp_desc with
       (* Constructor *)     
@@ -371,15 +387,15 @@ let rewrite_dps modpath dps_funs =
       | Pexp_pack _
       | Pexp_newtype (_, _)
       | Pexp_lazy _
-        -> (new refiner modpath dps_funs)#refine dest e0
+        -> (new tail_position modpath dps_funs)#refine ctx e0
 
       (* Type annotations *)
       | Pexp_constraint (body, ty) ->
         let ty = [%type: [%t ty] Ppx_tmaa_runtime.Destiny.t] in
-        with_new_dest
-          { e0 with pexp_desc = Pexp_constraint (dest, ty) }
-          (fun dest' ->
-             self#expression dest' body)          
+        let@ ctx = with_new_dest ctx
+            { e0 with pexp_desc = Pexp_constraint (ctx.dest, ty) }
+        in
+        self#expression ctx body
       | Pexp_coerce (body, ty1, ty2) ->
         let ty1 =
           Option.map
@@ -387,45 +403,60 @@ let rewrite_dps modpath dps_funs =
             ty1
         in
         let ty2 = [%type: [%t ty2] Ppx_tmaa_runtime.Destiny.t] in
-        with_new_dest
-          { e0 with pexp_desc = Pexp_coerce (dest, ty1, ty2) }
-          (fun dest' ->
-             self#expression dest' body)  
+        let@ ctx = with_new_dest ctx
+          { e0 with pexp_desc = Pexp_coerce (ctx.dest, ty1, ty2) }
+        in
+        self#expression ctx body
 
+      (* Memoisation *)
+      | Pexp_extension ({loc; txt=("memo"|"tmaa.memo")}, payload) ->
+        begin match payload with
+          | PStr [%str let [%p? x] = [%e? e1] in [%e? e2]] ->
+            let loc = {loc with loc_ghost = true} in
+            let e2' = self#expression ctx e2 in
+            Destiny.memo ~loc ~dest:ctx.dest
+              ~key:e1
+              ~f:(Ast.pexp_fun ~loc Nolabel None x e2')
+          | _ ->
+            Ast.pexp_extension ~loc
+            @@ Location.error_extensionf ~loc
+              "The only allowed memoisation formed is let%%memo"
+        end
+          
       (* Control construct, we can go down *)
       | Pexp_match (e, c) ->
         { e0 with
-          pexp_desc = Pexp_match (e, self#cases dest c)
+          pexp_desc = Pexp_match (e, self#cases ctx c)
         }
       | Pexp_ifthenelse (i, then_, else_) ->
         { e0 with
           pexp_desc =
-            Pexp_ifthenelse (i, self#expression dest then_,
-                             Option.map (self#expression dest) else_)
+            Pexp_ifthenelse (i, self#expression ctx then_,
+                             Option.map (self#expression ctx) else_)
         }
       | Pexp_let (s, e1, e2) ->
         { e0 with
-          pexp_desc = Pexp_let (s, e1, self#expression dest e2)
+          pexp_desc = Pexp_let (s, e1, self#expression ctx e2)
         }
       | Pexp_letmodule (s, m, e) ->
         { e0 with
-          pexp_desc = Pexp_letmodule (s, m, self#expression dest e)
+          pexp_desc = Pexp_letmodule (s, m, self#expression ctx e)
         }
       | Pexp_letexception (ec, e) ->
         { e0 with
-          pexp_desc = Pexp_letexception (ec, self#expression dest e)
+          pexp_desc = Pexp_letexception (ec, self#expression ctx e)
         }
       | Pexp_open (o, e) ->
         { e0 with
-          pexp_desc = Pexp_open (o, self#expression dest e)
+          pexp_desc = Pexp_open (o, self#expression ctx e)
         }
       | Pexp_sequence (e1, e2) ->
         { e0 with
-          pexp_desc = Pexp_sequence (e1, self#expression dest e2)
+          pexp_desc = Pexp_sequence (e1, self#expression ctx e2)
         }
       | Pexp_poly (e, ty) ->
         { e0 with
-          pexp_desc = Pexp_poly (self#expression dest e, ty)
+          pexp_desc = Pexp_poly (self#expression ctx e, ty)
         }
 
       (* Wrapping construct, we give up *)
@@ -433,13 +464,13 @@ let rewrite_dps modpath dps_funs =
       | Pexp_while (_, _)
       | Pexp_for (_, _, _, _, _)
       | Pexp_assert _
-        -> Destiny.fill ~loc:e0.pexp_loc ~dest e0
+        -> Destiny.fill ~loc:e0.pexp_loc ~dest:ctx.dest e0
 
       (* Others/Impossible to know *) 
       | Pexp_letop _
       | Pexp_extension _
       | Pexp_unreachable
-        -> Destiny.fill ~loc:e0.pexp_loc ~dest e0
+        -> Destiny.fill ~loc:e0.pexp_loc ~dest:ctx.dest e0
   end
 
 (** Traverse function arguments to modify the body.
@@ -448,7 +479,7 @@ let rewrite_dps modpath dps_funs =
 
 let dps_function_body o e =
   let loc = e.pexp_loc in
-  let dest_pat, dest_expr = fresh_dest loc in
+  let dest_pat, ctx = fresh_ctx loc in
   let rec process_function dest_typ e = match e.pexp_desc with
     | Pexp_newtype (ty, body) ->
       { e with pexp_desc = Pexp_newtype (ty, process_function dest_typ body) }
@@ -468,10 +499,10 @@ let dps_function_body o e =
       (* Found the body *)
       let loc = e.pexp_loc in
       let typ_cstr = match dest_typ with
-        | None -> dest_expr
+        | None -> ctx.dest
         | Some Pconstraint ty ->
           let ty = [%type: [%t ty] Ppx_tmaa_runtime.Destiny.t] in
-          Ast.pexp_constraint ~loc dest_expr ty
+          Ast.pexp_constraint ~loc ctx.dest ty
         | Some Pcoerce (ty1, ty2) ->
           let ty1 =
             Option.map
@@ -479,11 +510,11 @@ let dps_function_body o e =
               ty1
           in
           let ty2 = [%type: [%t ty2] Ppx_tmaa_runtime.Destiny.t] in
-          Ast.pexp_coerce ~loc dest_expr ty1 ty2
+          Ast.pexp_coerce ~loc ctx.dest ty1 ty2
       in
       Ast.pexp_let ~loc Nonrecursive
         [Ast.value_binding ~loc ~pat:dest_pat ~expr:typ_cstr] @@
-      o#expression dest_expr e
+      o#expression ctx e
   in 
   Ast.pexp_fun ~loc Nolabel None dest_pat @@ process_function None e
 
@@ -528,11 +559,14 @@ let entry_function_body dps_fun e =
     )
     e
 
-(* Todo: Make a real error *)
 let get_vb_name vb =
   match vb.pvb_pat.ppat_desc with
   | Ppat_var name -> name
-  | _ -> failwith "Forbidden binding in a let%async"
+  | _ ->
+    Location.raise_errorf ~loc:vb.pvb_loc "Forbidden binding in a let%%async. All bindings should be functions declarations."
+
+let dps_function_name =
+  Ast.Located.map (fun orig -> orig ^ "$dps")
 
 let rewrite_async_bindings
     ~(modpath : longident) ~dps_funs ~loc
@@ -547,7 +581,7 @@ let rewrite_async_bindings
         dps_funs
         l        
   in
-  let o = rewrite_dps modpath dps_funs in
+  let o = traverse_tail modpath dps_funs in
   let f ({ pvb_pat; pvb_expr; _ } as vb) =
     let dps_fun = DpsFuns.find (get_vb_name vb).txt dps_funs in
     let vb =
@@ -582,7 +616,7 @@ let context = Extension.Context.structure_item
 let extracter =
   Ast_pattern.(pstr @@ many @@ pack3 @@ pstr_loc __ @@ pstr_value __ __)
 
-let expander ~ctxt:_ ~arg bindings =
+let expander ~loc:_ ~path:_ ~arg bindings =
   let modpath =
     arg
     |> Option.map (fun {txt;_} -> txt)
@@ -593,13 +627,13 @@ let expander ~ctxt:_ ~arg bindings =
        rewrite_async_bindings ~modpath ~dps_funs:DpsFuns.empty ~loc rec_flag l)
     bindings
 
-let ext = Extension.V3.declare_inline_with_path_arg
+let ext = Extension.declare_inline_with_path_arg
     "async"
     context
     extracter
     expander
 
 let () =
-  Driver.V2.register_transformation
+  Driver.register_transformation
     ~extensions:[ext]
     "tail_mod_await"

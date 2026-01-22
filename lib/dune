@@ -2,7 +2,7 @@
  (public_name ppx_tmaa.runtime)
  (name ppx_tmaa_runtime)
  (modules Ppx_tmaa_runtime)
- (libraries picos)
+ (libraries picos saturn)
 )
 
 (library

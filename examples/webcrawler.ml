@@ -3,8 +3,9 @@ open Picos
 (** The actual crawler *)
 
 type page =
-  | Page of (Uri.t * string * page list)
-  | WrongPage of (Uri.t * string)
+  | Page of string * page list
+  | Document of string
+  | WrongPage of string
 [@@deriving eq, show { with_path = false }]
 
 (* let fetch_uri uri = *)
@@ -17,6 +18,13 @@ let fetch_uri uri =
   | Ok { code; _ } when code > 400 -> Error (Format.sprintf "code %i" code)
   | Ok { body; _ } -> Ok body
   | Error (_, x) -> Error x
+
+let is_page uri =
+  Uri.path uri = ""
+  || String.ends_with ~suffix:".html" @@ Uri.path uri
+  || String.ends_with ~suffix:".htm" @@ Uri.path uri
+  || String.ends_with ~suffix:"/" @@ Uri.path uri
+  
 
 let get_links body =
   let open Soup in 
@@ -40,22 +48,28 @@ let process_links ~base links =
     ) links
 
 let%async rec fetch_page ~base ~cutoff uri =
-  if cutoff <= 0 then begin
-      Format.eprintf "Cut at %a@." Uri.pp_hum uri;
-      WrongPage (uri, "cutoff")
-    end else begin
-      Fiber.sleep ~seconds:0.1;
-      Format.eprintf "Fetching %a@." Uri.pp_hum uri;
-      let content = fetch_uri uri in
-      match content with
-      | Error error -> WrongPage (uri, error)
-      | Ok content -> 
-         let all_links = get_links content in
-         let internal_links = process_links ~base all_links in
-         Page (uri, content,
-               Computation.await (fetch_pages ~base ~cutoff:(cutoff-1) internal_links))
-    end
-  
+  let uri = Uri.canonicalize uri in
+  Fiber.sleep ~seconds:0.1;
+  let%memo _uris = Uri.to_string uri in
+  if not @@ is_page uri then begin
+    Format.eprintf "Found %a@." Uri.pp_hum uri;
+    Document (Uri.path uri)
+  end else if cutoff <= 0 then begin
+    Format.eprintf "Cut at %a@." Uri.pp_hum uri;
+    WrongPage ("cutoff")
+  end else begin
+    Format.eprintf "Fetching %a@." Uri.pp_hum uri;
+    let content = fetch_uri uri in
+    match content with
+    | Error error -> WrongPage error
+    | Ok content -> 
+      let all_links = get_links content in
+      let internal_links = process_links ~base all_links in
+      Page (Uri.path uri,
+            Computation.await (
+              fetch_pages ~base ~cutoff:(cutoff-1) internal_links))
+  end
+
 and fetch_pages ~base ~cutoff links = match links with
   | [] -> []
   | h :: t ->
@@ -64,10 +78,20 @@ and fetch_pages ~base ~cutoff links = match links with
 [@@warning "-32"]
 
 let main () =
-  let cutoff = 1 in
+  let cutoff = 3 in
   let uri = Uri.of_string (Sys.argv.(1)) in
   let root_page = Computation.await @@ fetch_page ~base:uri ~cutoff uri in
-  Inspect.Dot.dump root_page
+  let context =
+    object
+      inherit Inspect.Dot.context () as _c
+      (* method! should_follow_edge ~src:_ ~field:_ ~dst = *)
+      (*   if Obj.tag dst = Obj.string_tag then false else true *)
+      (* method! should_inline obj = *)
+      (*   if Obj.tag obj = Obj.string_tag then true else c#should_inline obj *)
+    end
+  in
+  Inspect.Dot.dump ~context root_page
+  (* ignore root_page *)
 
 let () =
   Picos_mux_multififo.run_on ~n_domains:4 main

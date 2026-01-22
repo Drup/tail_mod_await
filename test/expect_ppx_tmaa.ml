@@ -34,12 +34,13 @@ let rewrite_expr e =
   let modname = lident "A" in
   let dps_funs = Ppx_tmaa.DpsFuns.singleton "f" ({loc; txt = "f_dps"}) in
   let dest = Ast.evar ~loc "dest" in
+  let ctx = Ppx_tmaa.{memo_key = None; memo_tbl = None; dest} in
   Ppx_tmaa.reset_ids ();
-  (Ppx_tmaa.rewrite_dps modname dps_funs)#expression dest e
+  (Ppx_tmaa.traverse_tail modname dps_funs)#expression ctx e
 
 let check_expr (s, e1, e2) =
   let open Alcotest in
-  test_case s `Quick (fun () -> check expr_testable s (rewrite_expr e1) e2)
+  test_case s `Quick (fun () -> check expr_testable s e2 (rewrite_expr e1))
 
 (** Tests over rewritten expressions. *)
 let expr_tests = List.map check_expr [
@@ -226,7 +227,11 @@ let expr_tests = List.map check_expr [
         in
         AsyncFun.fork (fun () -> f_dps dest__005_ aux xs);
         Destiny.fill dest__004_ (f x)
-    ]
+    ];
+
+    "arbitrary return",
+    [%expr (fun x -> x)],
+    [%expr Destiny.fill dest (fun x -> x)];
   ]
 
 (** Test runner. *)
