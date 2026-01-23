@@ -73,14 +73,10 @@ module Root = struct
   let as_promise (Root r) = r.computation
 
   let resolve (Root r) =
-    begin if St.is_empty r.dangling_links then
-        Format.eprintf "No dangling links.@."
-      else
-        let l = St.pop_all r.dangling_links in
-        List.iter (fun {first = Loc first; late = Loc late} ->
-            Loc.set late (Obj.magic @@ Loc.get first)
-          ) l;
-    end;
+    let l = St.pop_all r.dangling_links in
+    List.iter (fun {first = Loc first; late = Loc late} ->
+        Loc.set late (Obj.magic @@ Loc.get first)
+      ) l;
     P.Computation.return r.computation (Loc.get r.loc)
 
   let add_holes (Root r) n =
