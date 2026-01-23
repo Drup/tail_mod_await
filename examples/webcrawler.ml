@@ -4,7 +4,6 @@ open Picos
 
 type page =
   | Page of string * page list
-  | Document of string
   | WrongPage of string
 [@@deriving eq, show { with_path = false }]
 
@@ -27,10 +26,12 @@ let is_page uri =
   
 
 let get_links body =
-  let open Soup in 
-  let soup = parse body in
-  let links = soup $$ "a[href]" |> to_list in
-  List.map (fun a -> Uri.of_string @@ R.attribute "href" a) links
+  let open Soup in
+  try
+    let soup = parse body in
+    let links = soup $$ "a[href]" |> to_list in
+    List.map (fun a -> Uri.of_string @@ R.attribute "href" a) links
+  with Soup.Parse_error _ -> []
 
 let process_links ~base links =
   List.filter_map (fun link ->
@@ -39,22 +40,19 @@ let process_links ~base links =
         |> Uri.with_uri ~query:None ~fragment:None
       in
       let base_host = Uri.host base and base_path = Uri.path base in
-      if Uri.host link = base_host &&
-           String.sub (Uri.path link) 0 (String.length base_path) = base_path
+      if Uri.host link = base_host
+      && String.sub (Uri.path link) 0 (String.length base_path) = base_path
       then
         Some link
       else
         None
     ) links
+  |> List.sort_uniq Uri.compare
 
 let%async rec fetch_page ~base ~cutoff uri =
-  let uri = Uri.canonicalize uri in
   Fiber.sleep ~seconds:0.1;
   let%memo _uris = Uri.to_string uri in
-  if not @@ is_page uri then begin
-    Format.eprintf "Found %a@." Uri.pp_hum uri;
-    Document (Uri.path uri)
-  end else if cutoff <= 0 then begin
+  if cutoff <= 0 then begin
     Format.eprintf "Cut at %a@." Uri.pp_hum uri;
     WrongPage ("cutoff")
   end else begin
@@ -62,12 +60,16 @@ let%async rec fetch_page ~base ~cutoff uri =
     let content = fetch_uri uri in
     match content with
     | Error error -> WrongPage error
-    | Ok content -> 
-      let all_links = get_links content in
-      let internal_links = process_links ~base all_links in
-      Page (Uri.path uri,
-            Computation.await (
-              fetch_pages ~base ~cutoff:(cutoff-1) internal_links))
+    | Ok content ->
+      if is_page uri then
+        let all_links = get_links content in
+        let internal_links = process_links ~base all_links in
+        Page (Uri.path uri,
+              Computation.await (
+                fetch_pages ~base ~cutoff:(cutoff-1) internal_links))
+      else
+        Page (Uri.path uri, [])
+        
   end
 
 and fetch_pages ~base ~cutoff links = match links with
@@ -78,7 +80,7 @@ and fetch_pages ~base ~cutoff links = match links with
 [@@warning "-32"]
 
 let main () =
-  let cutoff = 3 in
+  let cutoff = 5 in
   let uri = Uri.of_string (Sys.argv.(1)) in
   let root_page = Computation.await @@ fetch_page ~base:uri ~cutoff uri in
   let context =
