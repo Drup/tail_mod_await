@@ -3,7 +3,7 @@ open Picos
 (** The actual crawler *)
 
 type page =
-  | Page of string * page list
+  | Page of string * string * page list
   | WrongPage of string
 [@@deriving eq, show { with_path = false }]
 
@@ -39,10 +39,8 @@ let process_links ~base links =
         Uri.resolve "http" base link
         |> Uri.with_uri ~query:None ~fragment:None
       in
-      let base_host = Uri.host base and base_path = Uri.path base in
-      if Uri.host link = base_host
-      && String.sub (Uri.path link) 0 (String.length base_path) = base_path
-      then
+      let base_host = Uri.host base in
+      if Uri.host link = base_host then
         Some link
       else
         None
@@ -50,7 +48,6 @@ let process_links ~base links =
   |> List.sort_uniq Uri.compare
 
 let%async rec fetch_page ~base ~cutoff uri =
-  Fiber.sleep ~seconds:0.1;
   let%memo _uris = Uri.to_string uri in
   if cutoff <= 0 then begin
     Format.eprintf "Cut at %a@." Uri.pp_hum uri;
@@ -65,10 +62,11 @@ let%async rec fetch_page ~base ~cutoff uri =
         let all_links = get_links content in
         let internal_links = process_links ~base all_links in
         Page (Uri.path uri,
+              content,
               Computation.await (
                 fetch_pages ~base ~cutoff:(cutoff-1) internal_links))
       else
-        Page (Uri.path uri, [])
+        Page (Uri.path uri, content, [])
         
   end
 
@@ -81,8 +79,12 @@ and fetch_pages ~base ~cutoff links = match links with
 
 let main () =
   let cutoff = 5 in
-  let uri = Uri.of_string (Sys.argv.(1)) in
+  let uri = Uri.canonicalize @@ Uri.of_string (Sys.argv.(1)) in
   let root_page = Computation.await @@ fetch_page ~base:uri ~cutoff uri in
+  Format.eprintf
+    "Total size : %.3FMb@."
+    (float (Obj.reachable_words (Obj.repr root_page)) /. 1024. /. 1024.)
+  ;
   let context =
     object
       inherit Inspect.Dot.context () as _c
@@ -93,7 +95,6 @@ let main () =
     end
   in
   Inspect.Dot.dump ~context root_page
-  (* ignore root_page *)
 
 let () =
   Picos_mux_multififo.run_on ~n_domains:4 main
