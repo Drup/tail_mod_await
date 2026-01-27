@@ -22,44 +22,53 @@ module Loc : sig
   val get : 'a t -> 'a
 end
 
-module Destiny : sig
+module rec Destiny : sig
   (** The destiny of an asynchronous computation. *)
   
   (** A Destiny whose current hole is of type ['a] and whose memoisation
       uses type 'k *)
-  type ('k, 'h) t
+  type 'h t
 
   (** An heterogeneous list of destinies *)
-  type ('k, 'a) list =
-    | [] : ('k, unit) list
-    | (::) : ('k, 'h) t * ('k, 'h2) list -> ('k, 'h * 'h2) list
+  type 'a list =
+    | [] : unit list
+    | (::) : 'h t * 'h2 list -> ('h * 'h2) list
 
   (** [mk ()] returns a synchronised destiny and promise.
       The promise will be fulfilled only when all holes in the destiny are
       filled.
   *)
-  val mk : unit -> ('k, 'a) t * 'a Picos.Computation.t
+  val mk : _ Memo.t -> 'k t * 'a Picos.Computation.t
 
   (** [refine d v hs] fill the destiny [d] with a value [v]
       that currently has the holes [hs].
       It returns a list of destinies corresponding to each holes.
       [d] should not be used again.
   *)
-  val refine : ('k, 'b) t -> 'b -> 'a Loc.list -> ('k, 'a) list
+  val refine : 'b t -> 'b -> 'a Loc.list -> 'a list
 
   (** [fill d v] is an alias for [refine d v []]. *)
-  val fill : ('k, 'b) t -> 'b -> unit
+  val fill : 'b t -> 'b -> unit
 
   (** [chain c d] will fill the destiny [d] with the value of the
       asynchronous computation [c] when it is finished. *)
-  val chain : 'a Picos.Computation.t -> ('k, 'a) t -> unit
+  val chain : 'a Picos.Computation.t -> 'a t -> unit
 
-  val memo : ('a, 'b) t -> 'a -> ('a -> unit) -> unit
 end
 
-module AsyncFun : sig
+and Memo : sig
 
-  type t
+  type ('a, 'b) t
+      
+  val init : unit -> ('a, 'b) t
+  
+  val memo : ('a, 'b) t -> 'b Destiny.t -> 'a -> ('a -> unit) -> unit
+
+end
+
+
+
+module AsyncFun : sig
 
   val fork : (unit -> unit) -> unit
 

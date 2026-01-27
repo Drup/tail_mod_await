@@ -1,13 +1,14 @@
 module P = Picos
 
+module H = Saturn.Htbl
+module St = Saturn.Stack
+
 module Loc = struct
 
   type 'h t = {
     pointer : Obj.t ;
     offset : int ;
   }
-
-  type loc = Loc : 'h t -> loc
   
   type 'a list =
     | [] : unit list
@@ -45,125 +46,202 @@ module Loc = struct
         Obj.obj @@ Obj.field loc.pointer loc.offset
 end
 
-module Root = struct
-  module H = Saturn.Htbl
-  module St = Saturn.Stack
 
-  type dangling_link =
-    { first : Loc.loc ; late : Loc.loc }
+type counter = {
+  nb : int Atomic.t ;
+  parent : counter_parent ;
+  notify : root St.t ;
+}
+
+and counter_parent =
+  | Counter of counter
+  | Root of root
+
+and 'h destiny = {
+  hole : 'h Loc.t;
+  last_counter : counter ;
+  root : root;
+}
+
+and 'a dangling_link =
+  { first : 'a Loc.t ; late : 'a Loc.t }
+
+and ('k, 'a) memo = {
+  tbl : ('k, 'a destiny) H.t ;
+  dangling_links : 'a dangling_link St.t ;
+}
+
+and root = {
+  direct_holes : int Atomic.t ;
+  indirect_counters : int Atomic.t ;
+  resolve : unit -> unit ;
+}
+
+let root_try_resolve r =
+  if Atomic.get r.direct_holes = 0 &&
+     Atomic.compare_and_set r.indirect_counters 0 (-1) then
+    r.resolve ()
+
+let root_update_direct r n =
+  let oldv = Atomic.fetch_and_add r.direct_holes n in
+  let newv = oldv + n in
+  assert (newv >= 0);
+  if n = 0 then root_try_resolve r
+
+let root_incr_indirect r =
+  Atomic.incr r.indirect_counters
+let root_decr_indirect r = 
+  Atomic.decr r.indirect_counters;
+  if Atomic.get r.indirect_counters = 0 then root_try_resolve r
+
+let apply_links m =
+  (* TODO Check atomicity here *)
+  let l = St.pop_all m.dangling_links in
+  List.iter (fun {first = first; late = late} ->
+      Loc.set late (Loc.get first)
+    ) l;
+  ()
+
+module Counter = struct
   
-  type ('k, 'a) t = Root of {
-    nb_holes : int Atomic.t ;
-    tbl : ('k, Loc.loc) H.t ;
-    dangling_links : dangling_link St.t ;
-    computation : 'a P.Computation.t ;
-    loc : 'a Loc.t ;
-  }
+  let counter parent n =
+    let nb = Atomic.make n in
+    let notify = St.create () in
+    { nb ; parent ; notify }
 
-  let init () = 
-    let computation = P.Computation.create () in
-    let tbl = H.create () in
-    let nb_holes = Atomic.make 1 in
-    let value = ref (Loc.dummy ()) in
-    let loc = Loc.mk value 0 in
-    let dangling_links = St.create () in
-    Root { tbl ; nb_holes ; dangling_links ; loc ; computation }
+  let check0 c n =
+    if n = 0 then begin
+      let l = St.pop_all c.notify in
+      List.iter root_decr_indirect l
+    end
 
-  let as_loc (Root r) = r.loc
-  let as_promise (Root r) = r.computation
+  let register c r =
+    if Atomic.get c.nb = 0 then
+      ()
+    else begin
+      root_incr_indirect r;
+      St.push c.notify r;
+      check0 c (Atomic.get c.nb)
+    end
 
-  let resolve (Root r) =
-    let l = St.pop_all r.dangling_links in
-    List.iter (fun {first = Loc first; late = Loc late} ->
-        Loc.set late (Obj.magic @@ Loc.get first)
-      ) l;
-    P.Computation.return r.computation (Loc.get r.loc)
+  let rec update c n =
+    let oldv = Atomic.fetch_and_add c.nb n in
+    let newv = oldv + n in
+    assert (newv >= 0);
+    begin match c.parent with
+      | Root r -> root_update_direct r n
+      | Counter c -> update c n
+    end;
+    check0 c newv
 
-  let add_holes (Root r) n =
-    assert (n > 0);
-    let _ = Atomic.fetch_and_add r.nb_holes (- 1 + n) in
-    ()
-      
-  let[@inline always] decr_holes (Root r as r0) = 
-    Atomic.decr r.nb_holes;
-    if Atomic.compare_and_set r.nb_holes 0 (-1) then
-      resolve r0
-  
-  let memo (Root r as r0 : _ t) key loc f =
-    (* Atomically check if [key] has been seen. *)
-    if H.try_add r.tbl key (Loc loc) then
-      (* It wasn't seen, we have the lock. We can execute f *)
-      f key
-    else
-      (* It was seen. We can register the link *)
-      let first = H.find_exn r.tbl key in
-      St.push r.dangling_links {first; late = Loc loc};
-      decr_holes r0;
 end
-
 
 module Destiny = struct
 
-  type ('k, 'h) t = D : {
-      hole : 'h Loc.t;
-      root : ('k, 'r) Root.t ;
-    } -> ('k, 'h) t
-
-  let mk () =
-    let root = Root.init () in
-    let hole = Root.as_loc root in
-    D { hole ; root }, Root.as_promise root
+  type 'h t = 'h destiny
 
   (* Polymorphic map for getting subholes in a destiny *)
   
-  type ('k, 'a) list =
-    | [] : ('k, unit) list
-    | (::) : ('k, 'h) t * ('k, 'h2) list -> ('k, 'h * 'h2) list
+  type 'a list =
+    | [] : unit list
+    | (::) : 'h t * 'h2 list -> ('h * 'h2) list
 
   let rec subdestinies
-    : type a. _ t -> a Loc.list -> (_, a) list
-    = fun (D d as d0) -> function
+    : type a. _ t -> a Loc.list -> a list
+    = fun d -> function
       | [] -> []
-      | hole :: t -> D {d with hole} :: subdestinies d0 t
+      | hole :: t ->
+        let counter = Counter.counter (Counter d.last_counter) 1 in
+        let d' = { d with hole ; last_counter = counter } in
+        d' :: subdestinies d t
 
-  (* Memoisation *)
-  let memo (D d) key f =
-    Root.memo d.root key d.hole f
+  let decr d =
+    Counter.update d.last_counter (-1)
+  let incr d n =
+    Counter.update d.last_counter n
 
   (* Actual destiny functions. *)
 
-  let set (D d) v =
+  let set d v =
     Loc.set d.hole (Sys.opaque_identity v)
-
-  let refine (type a) (D d as d0) v (hs : a Loc.list) : (_, a) list =
-    set d0 v;
+  
+  let refine (type a) d v (hs : a Loc.list) : a list =
+    set d v;
     match hs with
     | [] ->
-      Root.decr_holes d.root;
+      decr d;
       []
+    | [ hole ] ->
+      (* Only one hole. No need to update counter. *)
+      [{ d with hole }]
     | _ -> 
       let locs = Loc.length hs in
-      Root.add_holes d.root locs;
-      subdestinies d0 hs
+      incr d (locs - 1);
+      subdestinies d hs
 
   let fill d v =
     let [] = refine d v [] in ()
 
-  let chain (c : 'a P.Computation.t) (D d as d0) =
+  let chain (c : 'a P.Computation.t) d =
     (* TODO: Improve efficiency with scheduler support *)
     let fiber = P.Fiber.create ~forbid:false c in
     P.Fiber.spawn fiber (fun _ ->
         let v = P.Computation.await c in
-        set d0 v;
-        Root.decr_holes d.root;
+        set d v;
+        decr d;
         ()
       )
+
+  (* Root initialisation *)
+  let mk tbl = 
+    let direct_holes = Atomic.make 1 in
+    let indirect_counters = Atomic.make 0 in
+
+    let computation = P.Computation.create () in
+    let value = ref (Loc.dummy ()) in
+    let hole = Loc.mk value 0 in
+    let resolve () =
+      apply_links tbl;
+      P.Computation.return computation !value
+    in
+
+    let root = { direct_holes ; indirect_counters ; resolve } in
+    let counter = Counter.counter (Root root) 1 in
+    let d = { hole; last_counter = counter; root } in
+    d, computation
+end
+
+module Memo = struct
+
+  type ('k, 'a) t = ('k, 'a) memo
+
+  let init () =
+    let tbl = H.create () in
+    let dangling_links = St.create () in
+    { tbl ; dangling_links }
+
+  let memo (m : _ t) d key f =
+    (* Atomically check if [key] has been seen. *)
+    if H.try_add m.tbl key d then
+      (* It wasn't seen, we have the lock. We can execute f *)
+      f key
+    else begin
+      (* It was seen. We can register the link *)
+      let dfirst = H.find_exn m.tbl key in
+      St.push m.dangling_links {first = dfirst.hole ; late = d.hole};
+      Destiny.decr d;
+      if dfirst.root == d.root then
+        ()
+      else begin
+        Counter.register dfirst.last_counter d.root
+      end
+    end
+
 end
 
 
-module AsyncFun = struct
 
-  type t = P.Fiber.t
+module AsyncFun = struct
 
   let fork f =
     let c = P.Computation.create () in
