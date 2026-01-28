@@ -28,8 +28,11 @@ module Destiny = struct
   let chain ~loc ~dest e =
     [%expr Ppx_tmaa_runtime.Destiny.chain [%e e] [%e dest]]
 
-  let memo ~loc ~dest ~key ~f =
-    [%expr Ppx_tmaa_runtime.Destiny.memo [%e dest] [%e key] [%e f]]
+end
+
+module Memo = struct
+  let memo ~loc ~tbl ~dest ~key ~f =
+    [%expr Ppx_tmaa_runtime.Memo.memo [%e tbl] [%e dest] [%e key] [%e f]]
 end
 
 let rec sequential_lets vbs body = match vbs with
@@ -58,7 +61,7 @@ let fresh_dest loc =
 type context_info = {
   dest : expression ;
   memo_key : expression option ;
-  memo_tbl : expression option ;
+  memo_tbl : label option ;
 }
 let fresh_ctx loc =
   let pat, dest = fresh_dest loc in
@@ -410,13 +413,17 @@ let traverse_tail modpath dps_funs =
 
       (* Memoisation *)
       | Pexp_extension ({loc; txt=("memo"|"tmaa.memo")}, payload) ->
-        begin match payload with
-          | PStr [%str let [%p? x] = [%e? e1] in [%e? e2]] ->
+        begin match payload, ctx.memo_tbl with
+          | PStr [%str let [%p? x] = [%e? e1] in [%e? e2]], Some tbl ->
             let loc = {loc with loc_ghost = true} in
             let e2' = self#expression ctx e2 in
-            Destiny.memo ~loc ~dest:ctx.dest
+            Memo.memo ~tbl:(Ast.evar ~loc tbl) ~loc ~dest:ctx.dest
               ~key:e1
               ~f:(Ast.pexp_fun ~loc Nolabel None x e2')
+          | _, None -> 
+            Ast.pexp_extension ~loc
+            @@ Location.error_extensionf ~loc
+              "Memoisation is only allowed when a table is available. Please mark the parameters containing memoisation table with [@memo.tbl]"
           | _ ->
             Ast.pexp_extension ~loc
             @@ Location.error_extensionf ~loc
@@ -477,20 +484,38 @@ let traverse_tail modpath dps_funs =
     Leave all parameters unchanged.
 *)
 
+(* Get the memotbl in a param, if present. *)
+let get_memotbl mtbl param =
+  match param.pparam_desc with
+  | Pparam_val (_, _, {ppat_desc = Ppat_var v; ppat_attributes; _} )
+    when List.exists
+        (fun attr -> attr.attr_name.txt = "memo.tbl")
+        ppat_attributes ->
+    begin match mtbl with
+      | Some _ ->
+        Location.raise_errorf ~loc:v.loc "Duplicated attribute @[memo.tbl]. Please only annotate one parameter."
+      | None ->
+        Some v.txt
+    end
+  | _ ->
+    mtbl
+
 let dps_function_body o e =
   let loc = e.pexp_loc in
   let dest_pat, ctx = fresh_ctx loc in
-  let rec process_function dest_typ e = match e.pexp_desc with
+  let rec process_function mtbl dest_typ e = match e.pexp_desc with
     | Pexp_newtype (ty, body) ->
-      { e with pexp_desc = Pexp_newtype (ty, process_function dest_typ body) }
+      { e with pexp_desc = Pexp_newtype (ty, process_function mtbl dest_typ body) }
     | Pexp_function (params, dest_typ, Pfunction_body body) ->
-      let body = Pfunction_body (process_function dest_typ body) in
+      let mtbl = List.fold_left get_memotbl mtbl params in
+      let body = Pfunction_body (process_function mtbl dest_typ body) in
       { e with pexp_desc = Pexp_function (params, None, body) }
     | Pexp_function (params, typ, Pfunction_cases (cases, loc, attrs)) ->
+      let mtbl = List.fold_left get_memotbl mtbl params in
       let cases =
         List.map
           (fun case ->
-             {case with pc_rhs = process_function dest_typ case.pc_rhs})
+             {case with pc_rhs = process_function mtbl dest_typ case.pc_rhs})
           cases
       in
       let body = Pfunction_cases (cases, loc, attrs) in
@@ -498,6 +523,7 @@ let dps_function_body o e =
     | _ ->
       (* Found the body *)
       let loc = e.pexp_loc in
+      let ctx = {ctx with memo_tbl = mtbl} in
       let typ_cstr = match dest_typ with
         | None -> ctx.dest
         | Some Pconstraint ty ->
@@ -516,40 +542,50 @@ let dps_function_body o e =
         [Ast.value_binding ~loc ~pat:dest_pat ~expr:typ_cstr] @@
       o#expression ctx e
   in 
-  Ast.pexp_fun ~loc Nolabel None dest_pat @@ process_function None e
+  Ast.pexp_fun ~loc Nolabel None dest_pat @@ process_function None None e
 
 (** Wrap a function definition to insert `async` in the body. *)
-let rec wrap_function arg_list f e = match e.pexp_desc with
+let rec wrap_function arg_list mtbl f e = match e.pexp_desc with
   | Pexp_newtype (_ty, body) ->
-    wrap_function arg_list f body
+    wrap_function arg_list mtbl f body
   | Pexp_function (params, typ, Pfunction_body body) ->
     let params, args =
       List.split @@
       List.filter_map (function
           | { pparam_desc = Pparam_newtype _; _ } -> None
-          | { pparam_loc = loc ; pparam_desc = Pparam_val (lbl, _, _) } ->
+          | { pparam_loc = loc ; pparam_desc = Pparam_val (lbl, _, p) } ->
             let name = gen_symbol ~prefix:"arg$" () in
-            let pat = Ast.ppat_var ~loc @@ Ast.Located.mk ~loc name in
-            let arg = Ast.pexp_ident ~loc @@ Ast.Located.lident ~loc name in
+            let attrs = p.ppat_attributes in
+            let pat =
+              Ast_helper.Pat.var ~attrs ~loc @@ Ast.Located.mk ~loc name
+            in
+            let arg =
+              Ast_helper.Exp.ident ~attrs ~loc @@
+              Ast.Located.lident ~loc name in
             let param =
               { pparam_loc = loc ; pparam_desc = Pparam_val (lbl, None, pat) }
             in
             Some (param, (lbl, arg))
         ) params
     in
-    let body = wrap_function (arg_list@args) f body in
+    let mtbl = List.fold_left get_memotbl mtbl params in
+    let body = wrap_function (arg_list@args) mtbl f body in
     { e with pexp_desc = Pexp_function (params, typ, Pfunction_body body) }
   | _ ->
     (* Found the body *)
-    f arg_list e
+    f arg_list mtbl e
 let wrap_function_args = wrap_function []
 
 let entry_function_body dps_fun e =
-  wrap_function_args
-    (fun args body ->
+  wrap_function_args None
+    (fun args mtbl body ->
        let loc = body.pexp_loc in
+       let e_mtbl = match mtbl with
+         | None -> [%expr Ppx_tmaa_runtime.Memo.init ()]
+         | Some v -> Ast.evar ~loc v
+       in
        [%expr 
-         let d, c = Ppx_tmaa_runtime.Destiny.mk () in
+         let d, c = Ppx_tmaa_runtime.Destiny.mk [%e e_mtbl] in
          Ppx_tmaa_runtime.AsyncFun.fork
            (fun () -> [%e
              Ast.pexp_apply ~loc dps_fun ((Nolabel, [%expr d])::args)

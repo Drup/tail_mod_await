@@ -109,7 +109,7 @@ module Counter = struct
     let notify = St.create () in
     { nb ; parent ; notify }
 
-  let check0 c n =
+  let checkif0 c n =
     if n = 0 then begin
       let l = St.pop_all c.notify in
       List.iter root_decr_indirect l
@@ -121,7 +121,7 @@ module Counter = struct
     else begin
       root_incr_indirect r;
       St.push c.notify r;
-      check0 c (Atomic.get c.nb)
+      checkif0 c (Atomic.get c.nb)
     end
 
   let rec update c n =
@@ -132,7 +132,7 @@ module Counter = struct
       | Root r -> root_update_direct r n
       | Counter c -> update c n
     end;
-    check0 c newv
+    checkif0 c newv
 
 end
 

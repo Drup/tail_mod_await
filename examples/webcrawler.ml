@@ -47,7 +47,7 @@ let process_links ~base links =
     ) links
   |> List.sort_uniq Uri.compare
 
-let%async rec fetch_page ~base ~cutoff uri =
+let%async rec fetch_page (tbl[@memo.tbl]) ~base ~cutoff uri =
   let%memo _uris = Uri.to_string uri in
   if cutoff <= 0 then begin
     Format.eprintf "Cut at %a@." Uri.pp_hum uri;
@@ -64,23 +64,25 @@ let%async rec fetch_page ~base ~cutoff uri =
         Page (Uri.path uri,
               content,
               Computation.await (
-                fetch_pages ~base ~cutoff:(cutoff-1) internal_links))
+                fetch_pages tbl ~base ~cutoff:(cutoff-1) internal_links))
       else
         Page (Uri.path uri, content, [])
         
   end
 
-and fetch_pages ~base ~cutoff links = match links with
+
+and fetch_pages tbl ~base ~cutoff links = match links with
   | [] -> []
   | h :: t ->
-     Computation.await (fetch_page ~base ~cutoff h) ::
-       Computation.await (fetch_pages ~base ~cutoff t)
+     Computation.await (fetch_page tbl ~base ~cutoff h) ::
+       Computation.await (fetch_pages tbl ~base ~cutoff t)
 [@@warning "-32"]
 
 let main () =
   let cutoff = 5 in
   let uri = Uri.canonicalize @@ Uri.of_string (Sys.argv.(1)) in
-  let root_page = Computation.await @@ fetch_page ~base:uri ~cutoff uri in
+  let memo = Ppx_tmaa_runtime.Memo.init () in
+  let root_page = Computation.await @@ fetch_page memo ~base:uri ~cutoff uri in
   Format.eprintf
     "Total size : %.3FMb@."
     (float (Obj.reachable_words (Obj.repr root_page)) /. 1024. /. 1024.)
