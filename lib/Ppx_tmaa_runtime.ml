@@ -61,15 +61,12 @@ and 'h destiny = {
   hole : 'h Loc.t;
   last_counter : counter ;
   root : root;
+  callback : 'h destiny_callback Atomic.t ;
 }
 
-and 'a dangling_link =
-  { first : 'a Loc.t ; late : 'a Loc.t }
-
-and ('k, 'a) memo = {
-  tbl : ('k, 'a destiny) H.t ;
-  dangling_links : 'a dangling_link St.t ;
-}
+and 'a destiny_callback =
+  | Filled of 'a
+  | ToFill of 'a Loc.t list
 
 and root = {
   direct_holes : int Atomic.t ;
@@ -83,7 +80,7 @@ let root_try_resolve r =
       r.resolve ()
 
 let root_update_direct r n =
-  let oldv = Atomic.fetch_and_add r.direct_holes n in
+  let _ = Atomic.fetch_and_add r.direct_holes n in
   (* let newv = oldv + n in *)
   (* assert (newv >= 0); *)
   root_try_resolve r
@@ -93,14 +90,6 @@ let root_incr_indirect r =
 let root_decr_indirect r = 
   Atomic.decr r.indirect_counters;
   root_try_resolve r
-
-let apply_links m =
-  (* TODO Check atomicity here *)
-  let l = St.pop_all m.dangling_links in
-  List.iter (fun {first = first; late = late} ->
-      Loc.set late (Loc.get first)
-    ) l;
-  ()
 
 module Counter = struct
   
@@ -146,13 +135,19 @@ module Destiny = struct
     | [] : unit list
     | (::) : 'h t * 'h2 list -> ('h * 'h2) list
 
+  let create ~root ~hole ~counter =
+    { root; callback = Atomic.make (ToFill []); hole ; last_counter = counter }
+  let create_from ?counter ~hole d =
+    let counter = Option.value counter ~default:d.last_counter in
+    create ~root:d.root ~hole ~counter
+  
   let rec subdestinies
     : type a. _ t -> a Loc.list -> a list
     = fun d -> function
       | [] -> []
       | hole :: t ->
         let counter = Counter.counter (Counter d.last_counter) 1 in
-        let d' = { d with hole ; last_counter = counter } in
+        let d' = create_from ~hole ~counter d in
         d' :: subdestinies d t
 
   let decr d =
@@ -163,8 +158,23 @@ module Destiny = struct
   (* Actual destiny functions. *)
 
   let set d v =
-    Loc.set d.hole (Sys.opaque_identity v)
-  
+    let oldv = Atomic.exchange d.callback (Filled v) in
+    match oldv with
+    | Filled v' -> assert (v == v')
+    | ToFill l ->
+      List.iter
+        (fun h -> Loc.set h (Sys.opaque_identity v))
+        (d.hole :: l)
+
+  let rec copy ~orig hole = 
+    match Atomic.get orig.callback with
+    | Filled v -> Loc.set hole v
+    | ToFill l as c ->
+      if Atomic.compare_and_set orig.callback c (ToFill (hole :: l)) then
+        ()
+      else
+        copy ~orig hole
+
   let refine (type a) d v (hs : a Loc.list) : a list =
     set d v;
     match hs with
@@ -173,12 +183,12 @@ module Destiny = struct
       []
     | [ hole ] ->
       (* Only one hole. No need to update counter. *)
-      [{ d with hole }]
+      [create_from d ~hole]
     | _ -> 
       let locs = Loc.length hs in
       incr d (locs - 1);
       subdestinies d hs
-
+    
   let fill d v =
     let [] = refine d v [] in ()
 
@@ -193,7 +203,7 @@ module Destiny = struct
       )
 
   (* Root initialisation *)
-  let mk tbl = 
+  let mk () = 
     let direct_holes = Atomic.make 1 in
     let indirect_counters = Atomic.make 0 in
 
@@ -201,39 +211,35 @@ module Destiny = struct
     let value = ref (Loc.dummy ()) in
     let hole = Loc.mk value 0 in
     let resolve () =
-      apply_links tbl;
       P.Computation.return computation !value
     in
 
     let root = { direct_holes ; indirect_counters ; resolve } in
     let counter = Counter.counter (Root root) 1 in
-    let d = { hole; last_counter = counter; root } in
+    let d = create ~hole ~counter ~root in
     d, computation
 end
 
 module Memo = struct
 
-  type ('k, 'a) t = ('k, 'a) memo
+  type ('k, 'a) t = ('k, 'a Destiny.t) H.t
 
-  let init () =
-    let tbl = H.create () in
-    let dangling_links = St.create () in
-    { tbl ; dangling_links }
+  let init = H.create
 
-  let memo (m : _ t) d key f =
+  let memo (tbl : _ t) d key f =
     (* Atomically check if [key] has been seen. *)
-    if H.try_add m.tbl key d then
+    if H.try_add tbl key d then
       (* It wasn't seen, we have the lock. We can execute f *)
       f key
     else begin
       (* It was seen. We can register the link *)
-      let dfirst = H.find_exn m.tbl key in
-      St.push m.dangling_links {first = dfirst.hole ; late = d.hole};
+      let orig = H.find_exn tbl key in
+      Destiny.copy ~orig d.hole;
       Destiny.decr d;
-      if dfirst.root == d.root then
+      if orig.root == d.root then
         ()
       else begin
-        Counter.register dfirst.last_counter d.root
+        Counter.register orig.last_counter d.root
       end
     end
 

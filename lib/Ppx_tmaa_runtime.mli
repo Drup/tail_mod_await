@@ -38,7 +38,7 @@ module rec Destiny : sig
       The promise will be fulfilled only when all holes in the destiny are
       filled.
   *)
-  val mk : _ Memo.t -> 'k t * 'a Picos.Computation.t
+  val mk : unit -> 'k t * 'a Picos.Computation.t
 
   (** [refine d v hs] fill the destiny [d] with a value [v]
       that currently has the holes [hs].
@@ -60,8 +60,10 @@ and Memo : sig
 
   type ('a, 'b) t
       
-  val init : unit -> ('a, 'b) t
-  
+  val init :
+    ?hashed_type:'a Saturn.Htbl.hashed_type ->
+    ?min_buckets:int -> ?max_buckets:int -> unit -> ('a, 'b) t
+
   val memo : ('a, 'b) t -> 'b Destiny.t -> 'a -> ('a -> unit) -> unit
 
 end

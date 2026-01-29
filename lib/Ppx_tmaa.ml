@@ -580,12 +580,12 @@ let entry_function_body dps_fun e =
   wrap_function_args None
     (fun args mtbl body ->
        let loc = body.pexp_loc in
-       let e_mtbl = match mtbl with
+       let _e_mtbl = match mtbl with
          | None -> [%expr Ppx_tmaa_runtime.Memo.init ()]
          | Some v -> Ast.evar ~loc v
        in
        [%expr 
-         let d, c = Ppx_tmaa_runtime.Destiny.mk [%e e_mtbl] in
+         let d, c = Ppx_tmaa_runtime.Destiny.mk () in
          Ppx_tmaa_runtime.AsyncFun.fork
            (fun () -> [%e
              Ast.pexp_apply ~loc dps_fun ((Nolabel, [%expr d])::args)
