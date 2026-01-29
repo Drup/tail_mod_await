@@ -31,12 +31,17 @@ let%async rec hanoi (tbl[@memo.tbl]) n r1 r2 =
     )
   end
 
+let pp_size x =
+  Format.eprintf
+    "Total size : %.3FMb@."
+    (float (Obj.reachable_words (Obj.repr x)) /. 1024. /. 1024.)
+
 
 let main () =
   let tbl = Ppx_tmaa_runtime.Memo.init () in
   let () = match Sys.argv.(1) with
     | "hanoi" ->
-      Format.printf "%a@." pp_solution
+      pp_size
       @@ Computation.await
       @@ hanoi tbl (int_of_string Sys.argv.(2)) Left Right
     | s -> invalid_arg s
