@@ -78,21 +78,21 @@ and root = {
 }
 
 let root_try_resolve r =
-  if Atomic.get r.direct_holes = 0 &&
-     Atomic.compare_and_set r.indirect_counters 0 (-1) then
-    r.resolve ()
+  if Atomic.get r.direct_holes = 0 then
+    if Atomic.compare_and_set r.indirect_counters 0 (-1) then
+      r.resolve ()
 
 let root_update_direct r n =
   let oldv = Atomic.fetch_and_add r.direct_holes n in
-  let newv = oldv + n in
-  assert (newv >= 0);
-  if n = 0 then root_try_resolve r
+  (* let newv = oldv + n in *)
+  (* assert (newv >= 0); *)
+  root_try_resolve r
 
 let root_incr_indirect r =
   Atomic.incr r.indirect_counters
 let root_decr_indirect r = 
   Atomic.decr r.indirect_counters;
-  if Atomic.get r.indirect_counters = 0 then root_try_resolve r
+  root_try_resolve r
 
 let apply_links m =
   (* TODO Check atomicity here *)
