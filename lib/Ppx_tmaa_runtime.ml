@@ -114,14 +114,15 @@ module Counter = struct
     end
 
   let rec update c n =
+    assert (n >= -1);
     let oldv = Atomic.fetch_and_add c.nb n in
     let newv = oldv + n in
     assert (newv >= 0);
+    checkif0 c newv;
     begin match c.parent with
       | Root r -> root_update_direct r n
       | Counter c -> update c n
-    end;
-    checkif0 c newv
+    end
 
 end
 
@@ -166,10 +167,11 @@ module Destiny = struct
         (fun h -> Loc.set h (Sys.opaque_identity v))
         (d.hole :: l)
 
-  let rec copy ~orig hole = 
-    match Atomic.get orig.callback with
+  let rec copy ~orig hole =
+    let c = Atomic.get orig.callback in
+    match c with
     | Filled v -> Loc.set hole v
-    | ToFill l as c ->
+    | ToFill l ->
       if Atomic.compare_and_set orig.callback c (ToFill (hole :: l)) then
         ()
       else
@@ -208,10 +210,10 @@ module Destiny = struct
     let indirect_counters = Atomic.make 0 in
 
     let computation = P.Computation.create () in
-    let value = ref (Loc.dummy ()) in
-    let hole = Loc.mk value 0 in
+    let value : 'a ref = ref (Loc.dummy ()) in
+    let hole : 'a Loc.t = Loc.mk value 0 in
     let resolve () =
-      P.Computation.return computation !value
+      P.Computation.return computation (Loc.get hole)
     in
 
     let root = { direct_holes ; indirect_counters ; resolve } in
@@ -226,22 +228,26 @@ module Memo = struct
 
   let init = H.create
 
+  type 'v add_or_get = Added | Found of 'v
+  let add_or_get tbl k v =
+    if H.try_add tbl k v then
+      Added
+    else
+      Found (H.find_exn tbl k)
+
   let memo (tbl : _ t) d key f =
     (* Atomically check if [key] has been seen. *)
-    if H.try_add tbl key d then
+    match add_or_get tbl key d with
+    | Added ->
       (* It wasn't seen, we have the lock. We can execute f *)
       f key
-    else begin
+    | Found orig ->
       (* It was seen. We can register the link *)
-      let orig = H.find_exn tbl key in
       Destiny.copy ~orig d.hole;
       Destiny.decr d;
-      if orig.root == d.root then
-        ()
-      else begin
+      if not (orig.root == d.root) then begin
         Counter.register orig.last_counter d.root
       end
-    end
 
 end
 
@@ -249,6 +255,12 @@ end
 
 module AsyncFun = struct
 
+  let async f =
+    let c = P.Computation.create () in
+    let fiber = P.Fiber.create ~forbid:false c in
+    P.Fiber.spawn fiber (fun _ -> P.Computation.return c @@ f());
+    c
+  
   let fork f =
     let c = P.Computation.create () in
     let fiber = P.Fiber.create ~forbid:false c in

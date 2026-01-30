@@ -38,7 +38,7 @@ module rec Destiny : sig
       The promise will be fulfilled only when all holes in the destiny are
       filled.
   *)
-  val mk : unit -> 'k t * 'a Picos.Computation.t
+  val mk : unit -> 'a t * 'a Picos.Computation.t
 
   (** [refine d v hs] fill the destiny [d] with a value [v]
       that currently has the holes [hs].
@@ -72,6 +72,8 @@ end
 
 module AsyncFun : sig
 
+  val async : (unit -> 'a) -> 'a Picos.Computation.t
+  
   val fork : (unit -> unit) -> unit
 
 end
