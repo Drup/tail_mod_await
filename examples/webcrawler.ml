@@ -35,7 +35,7 @@ let get_links body =
     let soup = parse body in
     let links = soup $$ "a[href]" |> to_list in
     List.map (fun a -> Uri.of_string @@ R.attribute "href" a) links
-  with Soup.Parse_error _ -> []
+  with _ -> []
 
 let process_links ~base links =
   List.filter_map (fun link ->
@@ -53,11 +53,12 @@ let process_links ~base links =
 
 let%async rec fetch_page (tbl[@memo.tbl]) ~base ~cutoff uri =
   let%memo _uris = Uri.to_string uri in
-  if cutoff <= 0 then begin
-    Format.eprintf "Cut at %a@." Uri.pp_hum uri;
+  let n = Atomic.fetch_and_add cutoff (-1) in
+  if n < 0 then begin
+    (* Format.eprintf "Cut at %a@." Uri.pp_hum uri; *)
     WrongPage ("cutoff")
   end else begin
-    Format.eprintf "Fetching %a@." Uri.pp_hum uri;
+    (* Format.eprintf "Fetching %a@." Uri.pp_hum uri; *)
     let content = fetch_uri uri in
     match content with
     | Error error -> WrongPage error
@@ -67,7 +68,7 @@ let%async rec fetch_page (tbl[@memo.tbl]) ~base ~cutoff uri =
       Page (Uri.path uri,
             content,
             Computation.await (
-              fetch_pages tbl ~base ~cutoff:(cutoff-1) internal_links))
+              fetch_pages tbl ~base ~cutoff internal_links))
     | Ok (Other, content) ->
       Page (Uri.path uri, content, [])
 
@@ -81,16 +82,35 @@ and fetch_pages tbl ~base ~cutoff links = match links with
        Computation.await (fetch_pages tbl ~base ~cutoff t)
 [@@warning "-32"]
 
+
+(** Run everything *)
+
+let start s = 
+  print_endline ("Launching "^s);
+  Mtime_clock.counter ()
+let stop c =
+  Gc.full_major ();
+  Format.printf "Done in %a@.@?"
+    Mtime.Span.pp (Mtime_clock.count c)
+
+let n_domains = 4
+let cutoff = Atomic.make_contended 5000
+
 let main () =
-  let cutoff = 5 in
-  let uri = Uri.canonicalize @@ Uri.of_string (Sys.argv.(1)) in
+  let uri = Uri.canonicalize @@ Uri.of_string Sys.argv.(1) in
+  let title =
+    Format.asprintf "Webcrawler at %a with %i domains and cutoff=%i"
+      Uri.pp_hum uri n_domains (Atomic.get cutoff)
+  in
+  let c = start title in
   let memo = Ppx_tmaa_runtime.Memo.init () in
   let root_page = Computation.await @@ fetch_page memo ~base:uri ~cutoff uri in
-  Format.eprintf
+  stop c;
+  Format.printf
     "Total size : %.3FMb@."
     (float (Obj.reachable_words (Obj.repr root_page)) /. 1024. /. 1024.) ;
   (* Inspect.Dot.dump root_page; *)
   ()
 
 let () =
-  Picos_mux_multififo.run_on ~n_domains:4 main
+  Picos_mux_multififo.run_on ~n_domains main
