@@ -47,6 +47,6 @@
 (executable
  (name dp)
  (preprocess (pps ppx_tmaa ppx_deriving.eq ppx_deriving.show))
- (libraries picos_mux.multififo)
+ (libraries containers picos_mux.multififo)
  (modules dp)
 )
