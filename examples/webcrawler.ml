@@ -7,6 +7,8 @@ type page =
   | WrongPage of string
 [@@deriving eq, show { with_path = false }]
 
+type content_type = Html | Other
+
 (* let fetch_uri uri = *)
 (*   let resp, body = Picos_io_cohttp.Client.get uri in *)
 (*   if Cohttp.Response.status resp != `OK then failwith "Not OK"; *)
@@ -15,15 +17,17 @@ type page =
 let fetch_uri uri =
   match Ezcurl.get ~url:(Uri.to_string uri) () with
   | Ok { code; _ } when code > 400 -> Error (Format.sprintf "code %i" code)
-  | Ok { body; _ } -> Ok body
+  | Ok { body; headers; _ } ->
+    (* Format.eprintf "Headers: %a" *)
+    (*   Format.(pp_print_list pp_print_string) *)
+    (*   (List.map (fun (a,b) -> a ^ ": " ^ b ^ ";") headers); *)
+    let content_type =
+      match List.assoc_opt "Content-Type" headers with
+      | Some s when String.starts_with ~prefix:"text/html" s -> Html
+      | _ -> Other
+    in
+    Ok (content_type, body)
   | Error (_, x) -> Error x
-
-let is_page uri =
-  Uri.path uri = ""
-  || String.ends_with ~suffix:".html" @@ Uri.path uri
-  || String.ends_with ~suffix:".htm" @@ Uri.path uri
-  || String.ends_with ~suffix:"/" @@ Uri.path uri
-  
 
 let get_links body =
   let open Soup in
@@ -57,17 +61,16 @@ let%async rec fetch_page (tbl[@memo.tbl]) ~base ~cutoff uri =
     let content = fetch_uri uri in
     match content with
     | Error error -> WrongPage error
-    | Ok content ->
-      if is_page uri then
-        let all_links = get_links content in
-        let internal_links = process_links ~base all_links in
-        Page (Uri.path uri,
-              content,
-              Computation.await (
-                fetch_pages tbl ~base ~cutoff:(cutoff-1) internal_links))
-      else
-        Page (Uri.path uri, content, [])
-        
+    | Ok (Html, content) ->
+      let all_links = get_links content in
+      let internal_links = process_links ~base all_links in
+      Page (Uri.path uri,
+            content,
+            Computation.await (
+              fetch_pages tbl ~base ~cutoff:(cutoff-1) internal_links))
+    | Ok (Other, content) ->
+      Page (Uri.path uri, content, [])
+
   end
 
 
@@ -85,18 +88,9 @@ let main () =
   let root_page = Computation.await @@ fetch_page memo ~base:uri ~cutoff uri in
   Format.eprintf
     "Total size : %.3FMb@."
-    (float (Obj.reachable_words (Obj.repr root_page)) /. 1024. /. 1024.)
-  ;
-  let context =
-    object
-      inherit Inspect.Dot.context () as _c
-      (* method! should_follow_edge ~src:_ ~field:_ ~dst = *)
-      (*   if Obj.tag dst = Obj.string_tag then false else true *)
-      (* method! should_inline obj = *)
-      (*   if Obj.tag obj = Obj.string_tag then true else c#should_inline obj *)
-    end
-  in
-  Inspect.Dot.dump ~context root_page
+    (float (Obj.reachable_words (Obj.repr root_page)) /. 1024. /. 1024.) ;
+  (* Inspect.Dot.dump root_page; *)
+  ()
 
 let () =
   Picos_mux_multififo.run_on ~n_domains:4 main
