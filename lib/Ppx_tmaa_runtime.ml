@@ -206,8 +206,8 @@ module Destiny = struct
 
   (* Root initialisation *)
   let mk () = 
-    let direct_holes = Atomic.make 1 in
-    let indirect_counters = Atomic.make 0 in
+    let direct_holes = Atomic.make_contended 1 in
+    let indirect_counters = Atomic.make_contended 0 in
 
     let computation = P.Computation.create () in
     let value : 'a ref = ref (Loc.dummy ()) in
