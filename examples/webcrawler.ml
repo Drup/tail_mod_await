@@ -10,9 +10,20 @@ type page =
 type content_type = Html | Other
 
 (* let fetch_uri uri = *)
+(*   let open Cohttp in *)
 (*   let resp, body = Picos_io_cohttp.Client.get uri in *)
-(*   if Cohttp.Response.status resp != `OK then failwith "Not OK"; *)
-(*   Cohttp.Body.to_string body *)
+(*   match Response.status resp with *)
+(*   | `OK -> *)
+(*     let body = Cohttp.Body.to_string body in *)
+(*     let content_type = *)
+(*       let h = Header.get_media_type @@ Response.headers resp in *)
+(*       match h with *)
+(*       | Some s when String.starts_with ~prefix:"text/html" s -> Html *)
+(*       | _ -> Other *)
+(*     in *)
+(*     Ok (content_type, body) *)
+(*   | status ->  *)
+(*     Error (Code.string_of_status status) *)
 
 let fetch_uri uri =
   match Ezcurl.get ~url:(Uri.to_string uri) () with
