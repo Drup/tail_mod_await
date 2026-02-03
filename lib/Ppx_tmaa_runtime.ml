@@ -49,18 +49,14 @@ end
 
 type counter = {
   nb : int Atomic.t ;
-  parent : counter_parent ;
-  notify : root St.t ;
+  parent : counter option ;
+  notify : awaitable St.t ;
 }
-
-and counter_parent =
-  | Counter of counter
-  | Root of root
 
 and 'h destiny = {
   hole : 'h Loc.t;
   last_counter : counter ;
-  root : root;
+  awaitable : awaitable;
   callback : 'h destiny_callback Atomic.t ;
 }
 
@@ -68,32 +64,26 @@ and 'a destiny_callback =
   | Filled of 'a
   | ToFill of 'a Loc.t list
 
-and root = {
-  direct_holes : int Atomic.t ;
+and awaitable = {
+  direct_holes : counter ;
   indirect_counters : int Atomic.t ;
   resolve : unit -> unit ;
 }
 
-let root_try_resolve r =
-  if Atomic.get r.direct_holes = 0 then
+let awaitable_try_resolve r =
+  if Atomic.get r.direct_holes.nb = 0 then
     if Atomic.compare_and_set r.indirect_counters 0 (-1) then
       r.resolve ()
 
-let root_update_direct r n =
-  let _ = Atomic.fetch_and_add r.direct_holes n in
-  (* let newv = oldv + n in *)
-  (* assert (newv >= 0); *)
-  root_try_resolve r
-
-let root_incr_indirect r =
+let awaitable_incr_indirect r =
   Atomic.incr r.indirect_counters
-let root_decr_indirect r = 
+let awaitable_decr_indirect r = 
   Atomic.decr r.indirect_counters;
-  root_try_resolve r
+  awaitable_try_resolve r
 
 module Counter = struct
   
-  let counter parent n =
+  let mk ?parent n =
     let nb = Atomic.make n in
     let notify = St.create () in
     { nb ; parent ; notify }
@@ -101,14 +91,14 @@ module Counter = struct
   let checkif0 c n =
     if n = 0 then begin
       let l = St.pop_all c.notify in
-      List.iter root_decr_indirect l
+      List.iter awaitable_decr_indirect l
     end
 
   let register c r =
     if Atomic.get c.nb = 0 then
       ()
     else begin
-      root_incr_indirect r;
+      awaitable_incr_indirect r;
       St.push c.notify r;
       checkif0 c (Atomic.get c.nb)
     end
@@ -119,10 +109,8 @@ module Counter = struct
     let newv = oldv + n in
     assert (newv >= 0);
     checkif0 c newv;
-    begin match c.parent with
-      | Root r -> root_update_direct r n
-      | Counter c -> update c n
-    end
+    Option.iter (fun c -> update c n) c.parent;
+    ()
 
 end
 
@@ -136,18 +124,22 @@ module Destiny = struct
     | [] : unit list
     | (::) : 'h t * 'h2 list -> ('h * 'h2) list
 
-  let create ~root ~hole ~counter =
-    { root; callback = Atomic.make (ToFill []); hole ; last_counter = counter }
+  let create_root ~awaitable ~hole =
+    { awaitable; callback = Atomic.make (ToFill []); hole ;
+      last_counter = awaitable.direct_holes }
+    
   let create_from ?counter ~hole d =
     let counter = Option.value counter ~default:d.last_counter in
-    create ~root:d.root ~hole ~counter
+    { awaitable=d.awaitable;
+      callback = Atomic.make (ToFill []); hole ;
+      last_counter = counter }
   
   let rec subdestinies
     : type a. _ t -> a Loc.list -> a list
     = fun d -> function
       | [] -> []
       | hole :: t ->
-        let counter = Counter.counter (Counter d.last_counter) 1 in
+        let counter = Counter.mk ~parent:d.last_counter 1 in
         let d' = create_from ~hole ~counter d in
         d' :: subdestinies d t
 
@@ -204,9 +196,9 @@ module Destiny = struct
         ()
       )
 
-  (* Root initialisation *)
+  (* Awaitable initialisation *)
   let mk () = 
-    let direct_holes = Atomic.make_contended 1 in
+    let direct_holes = Counter.mk 1 in
     let indirect_counters = Atomic.make_contended 0 in
 
     let computation = P.Computation.create () in
@@ -216,9 +208,9 @@ module Destiny = struct
       P.Computation.return computation (Loc.get hole)
     in
 
-    let root = { direct_holes ; indirect_counters ; resolve } in
-    let counter = Counter.counter (Root root) 1 in
-    let d = create ~hole ~counter ~root in
+    let awaitable = { direct_holes ; indirect_counters ; resolve } in
+    Counter.register direct_holes awaitable;
+    let d = create_root ~hole ~awaitable in
     d, computation
 end
 
@@ -244,10 +236,11 @@ module Memo = struct
     | Found orig ->
       (* It was seen. We can register the link *)
       Destiny.copy ~orig d.hole;
+      if not (orig.awaitable == d.awaitable) then begin
+        Counter.register orig.last_counter d.awaitable
+      end;
       Destiny.decr d;
-      if not (orig.root == d.root) then begin
-        Counter.register orig.last_counter d.root
-      end
+      ()
 
 end
 
