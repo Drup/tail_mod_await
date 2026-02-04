@@ -11,7 +11,7 @@ OUT=webcrawler.csv
 
 echo "Writing in $OUT"
 
-printf "Run\tCPUs\tTime\tSize\n" > $OUT
+printf "Run\tCPUs\tTime(h)\tTime(ns)\tSize\n" > $OUT
 for cpus in $(seq 1 $NBCPUS)
 do
     echo "Running with $cpus CPUS"

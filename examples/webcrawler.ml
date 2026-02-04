@@ -101,8 +101,10 @@ let start _s =
   Mtime_clock.counter ()
 let stop c =
   Gc.full_major ();
-  Format.printf "%a\t"
-    Mtime.Span.pp (Mtime_clock.count c)
+  let t = Mtime_clock.count c in
+  Format.printf "%a\t%f\t"
+    Mtime.Span.pp t
+    (Mtime.Span.to_float_ns t)
 
 let n_domains = int_of_string Sys.argv.(1)
 let cutoff = Atomic.make_contended 10000
