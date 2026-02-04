@@ -101,14 +101,14 @@ let start s =
   Mtime_clock.counter ()
 let stop c =
   Gc.full_major ();
-  Format.printf "Done in %a@.@?"
+  Format.printf "%a\t"
     Mtime.Span.pp (Mtime_clock.count c)
 
-let n_domains = 4
-let cutoff = Atomic.make_contended 5000
+let n_domains = int_of_string Sys.argv.(1)
+let cutoff = Atomic.make_contended 10000
 
 let main () =
-  let uri = Uri.canonicalize @@ Uri.of_string Sys.argv.(1) in
+  let uri = Uri.canonicalize @@ Uri.of_string Sys.argv.(2) in
   let title =
     Format.asprintf "Webcrawler at %a with %i domains and cutoff=%i"
       Uri.pp_hum uri n_domains (Atomic.get cutoff)
@@ -118,7 +118,7 @@ let main () =
   let root_page = Computation.await @@ fetch_page memo ~base:uri ~cutoff uri in
   stop c;
   Format.printf
-    "Total size : %.3FMb@."
+    "%.3FMb@.@?"
     (float (Obj.reachable_words (Obj.repr root_page)) /. 1024. /. 1024.) ;
   (* Inspect.Dot.dump root_page; *)
   ()
