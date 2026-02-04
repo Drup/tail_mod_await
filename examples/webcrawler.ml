@@ -96,8 +96,8 @@ and fetch_pages tbl ~base ~cutoff links = match links with
 
 (** Run everything *)
 
-let start s = 
-  print_endline ("Launching "^s);
+let start _s = 
+  (* print_endline ("Launching "^s); *)
   Mtime_clock.counter ()
 let stop c =
   Gc.full_major ();
