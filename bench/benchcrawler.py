@@ -19,8 +19,10 @@ factor=1e6
 maxcpu = 4
 cpus = numpy.linspace(1, maxcpu, maxcpu)
 
+def select_data(d):
+    return d["Timens"]/d["SizeMb"]/factor
 def get_y(d):
-    ys = d["Timens"]/d["SizeMb"]/factor
+    ys = select_data(d)
     y = numpy.average(ys)
     errmin = y-min(ys)
     errmax = max(ys)-y
@@ -53,6 +55,14 @@ for mode, color, marker in par_series:
     label = "Async "+ mode
     d = data[data["Mode"] == mode]
     time = list()
+    # for cpu in cpus:
+    #     time.append(select_data(d[d["CPUs"] == cpu]))
+    # axL.violinplot(positions=cpus,
+    #                dataset=time,
+    #                widths=0.1,
+    #                showmeans=True,
+    #                )    
+    time = list()
     yerrU = list()
     yerrL = list()
     for cpu in cpus:
@@ -65,7 +75,6 @@ for mode, color, marker in par_series:
                  yerr=(yerrL,yerrU),
                  marker=marker,
                  label=label, color=color)
-    # axR.plot(xx, overhead, linestyle=linestyle, label=(name+" Overhead"), color=color, marker=".")
     
 plt.title('Webcrawler fetching 10000 pages')
 
