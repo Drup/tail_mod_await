@@ -83,7 +83,7 @@ plt.xlim(1,maxcpu)
 plt.xticks(numpy.arange(1, maxcpu+1, 1))
 
 # axL.set_yscale('log')
-axL.set_ylabel('Time per data ('+unit+'/Mb)')
+axL.set_ylabel('Time per data ('+unit+'/MB)')
 axL.set_ylim(0, None)
 lines, labels = axL.get_legend_handles_labels()
 axL.legend(lines, labels, loc='upper right')

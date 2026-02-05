@@ -11,7 +11,7 @@ OUT=webcrawler.csv
 
 echo "Writing in $OUT"
 
-printf "Mode,Run,CPUs,Time(h),Time(ns),Size(Mb)\n" > $OUT
+printf "Mode,Run,CPUs,Time(h),Time(ns),Size(MB)\n" > $OUT
 for mode in "breath" "depth"
 do
     cpus=0
