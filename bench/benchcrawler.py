@@ -16,13 +16,13 @@ fig, axL = plt.subplots()
 unit="ms"
 factor=1e6
 
-maxcpu = 4
+maxcpu = 12
 cpus = numpy.linspace(1, maxcpu, maxcpu)
 
 def select_data(d):
-    return d["Timens"]/d["SizeMb"]/factor
+    return d["Timens"]/d["SizeMB"]/factor
 def get_y(d):
-    ys = select_data(d)
+    ys = sorted(select_data(d))[1:-1]
     y = numpy.average(ys)
     errmin = y-min(ys)
     errmax = max(ys)-y
@@ -96,5 +96,5 @@ axL.legend(lines, labels, loc='upper right')
 plt.grid()
 
 plt.tight_layout()
+plt.savefig(file.replace("csv","png"))
 plt.show()
-# plt.savefig(sys.argv[1].replace("json","png"))

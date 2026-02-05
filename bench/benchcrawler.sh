@@ -7,6 +7,8 @@ HOST=$3
 BIN=./_build/default/examples/webcrawler.exe
 dune build $BIN
 
+URL="http://$HOST:8080/content/wikipedia_en_top_mini_2025-12/Functional_programming"
+
 OUT=webcrawler.csv
 
 echo "Writing in $OUT"
@@ -16,11 +18,11 @@ for mode in "breath" "depth"
 do
     cpus=0
     echo "Running $mode"
-    for round in $(seq 1 $REPEATS)
+    for round in $(seq 1 $((${REPEATS}*2)))
     do
         printf "+"
         printf "${mode},${round},${cpus}," >> $OUT
-        $BIN $mode ${cpus} "http://$HOST:8080/content/wikipedia_en_top_mini_2025-12/Lyon" >> webcrawler.csv
+        $BIN $mode ${cpus} $URL >> webcrawler.csv
     done
     printf "/\n"
 done
@@ -34,7 +36,7 @@ do
         do
             printf "+"
             printf "${mode},${round},${cpus}," >> $OUT
-            $BIN $mode ${cpus} "http://$HOST:8080/content/wikipedia_en_top_mini_2025-12/Lyon" >> webcrawler.csv
+            $BIN $mode ${cpus} $URL >> webcrawler.csv
         done
         printf "/\n"
     done
