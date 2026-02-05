@@ -47,94 +47,33 @@ module Loc = struct
 end
 
 
-type counter = {
-  nb : int Atomic.t ;
-  parent : counter_parent ;
-  notify : root St.t ;
-}
-
-and counter_parent =
-  | Counter of counter
-  | Root of root
+type counter = int Atomic.t
 
 and 'h destiny = {
   hole : 'h Loc.t;
-  last_counter : counter ;
-  root : root;
+  awaitable : awaitable;
+  callback : 'h destiny_callback Atomic.t ;
 }
 
-and 'a dangling_link =
-  { first : 'a Loc.t ; late : 'a Loc.t }
+and 'a destiny_callback =
+  | Filled of 'a
+  | ToFill of 'a Loc.t list
 
-and ('k, 'a) memo = {
-  tbl : ('k, 'a destiny) H.t ;
-  dangling_links : 'a dangling_link St.t ;
-}
-
-and root = {
-  direct_holes : int Atomic.t ;
-  indirect_counters : int Atomic.t ;
+and awaitable = {
+  nb : counter ;
   resolve : unit -> unit ;
 }
 
-let root_try_resolve r =
-  if Atomic.get r.direct_holes = 0 &&
-     Atomic.compare_and_set r.indirect_counters 0 (-1) then
+let awaitable_try_resolve r =
+  if Atomic.compare_and_set r.nb 0 (-1) then
     r.resolve ()
 
-let root_update_direct r n =
-  let oldv = Atomic.fetch_and_add r.direct_holes n in
+let awaitable_update r n =
+  assert (n >= -1);
+  let oldv = Atomic.fetch_and_add r.nb n in
   let newv = oldv + n in
   assert (newv >= 0);
-  if n = 0 then root_try_resolve r
-
-let root_incr_indirect r =
-  Atomic.incr r.indirect_counters
-let root_decr_indirect r = 
-  Atomic.decr r.indirect_counters;
-  if Atomic.get r.indirect_counters = 0 then root_try_resolve r
-
-let apply_links m =
-  (* TODO Check atomicity here *)
-  let l = St.pop_all m.dangling_links in
-  List.iter (fun {first = first; late = late} ->
-      Loc.set late (Loc.get first)
-    ) l;
   ()
-
-module Counter = struct
-  
-  let counter parent n =
-    let nb = Atomic.make n in
-    let notify = St.create () in
-    { nb ; parent ; notify }
-
-  let checkif0 c n =
-    if n = 0 then begin
-      let l = St.pop_all c.notify in
-      List.iter root_decr_indirect l
-    end
-
-  let register c r =
-    if Atomic.get c.nb = 0 then
-      ()
-    else begin
-      root_incr_indirect r;
-      St.push c.notify r;
-      checkif0 c (Atomic.get c.nb)
-    end
-
-  let rec update c n =
-    let oldv = Atomic.fetch_and_add c.nb n in
-    let newv = oldv + n in
-    assert (newv >= 0);
-    begin match c.parent with
-      | Root r -> root_update_direct r n
-      | Counter c -> update c n
-    end;
-    checkif0 c newv
-
-end
 
 module Destiny = struct
 
@@ -146,25 +85,50 @@ module Destiny = struct
     | [] : unit list
     | (::) : 'h t * 'h2 list -> ('h * 'h2) list
 
+  let create_root ~awaitable ~hole =
+    { awaitable; callback = Atomic.make (ToFill []); hole }
+    
+  let create_from ~hole d =
+    { awaitable=d.awaitable;
+      callback = Atomic.make (ToFill []); hole ;
+    }
+  
   let rec subdestinies
     : type a. _ t -> a Loc.list -> a list
     = fun d -> function
       | [] -> []
       | hole :: t ->
-        let counter = Counter.counter (Counter d.last_counter) 1 in
-        let d' = { d with hole ; last_counter = counter } in
+        let d' = create_from ~hole d in
         d' :: subdestinies d t
 
   let decr d =
-    Counter.update d.last_counter (-1)
+    awaitable_update d.awaitable (-1);
+    awaitable_try_resolve d.awaitable
+    
   let incr d n =
-    Counter.update d.last_counter n
+    awaitable_update d.awaitable n
 
   (* Actual destiny functions. *)
 
   let set d v =
-    Loc.set d.hole (Sys.opaque_identity v)
-  
+    let oldv = Atomic.exchange d.callback (Filled v) in
+    match oldv with
+    | Filled v' -> assert (v == v')
+    | ToFill l ->
+      List.iter
+        (fun h -> Loc.set h (Sys.opaque_identity v))
+        (d.hole :: l)
+
+  let rec copy ~orig hole =
+    let c = Atomic.get orig.callback in
+    match c with
+    | Filled v -> Loc.set hole v
+    | ToFill l ->
+      if Atomic.compare_and_set orig.callback c (ToFill (hole :: l)) then
+        ()
+      else
+        copy ~orig hole
+
   let refine (type a) d v (hs : a Loc.list) : a list =
     set d v;
     match hs with
@@ -173,12 +137,12 @@ module Destiny = struct
       []
     | [ hole ] ->
       (* Only one hole. No need to update counter. *)
-      [{ d with hole }]
+      [create_from d ~hole]
     | _ -> 
       let locs = Loc.length hs in
       incr d (locs - 1);
       subdestinies d hs
-
+    
   let fill d v =
     let [] = refine d v [] in ()
 
@@ -192,50 +156,47 @@ module Destiny = struct
         ()
       )
 
-  (* Root initialisation *)
-  let mk tbl = 
-    let direct_holes = Atomic.make 1 in
-    let indirect_counters = Atomic.make 0 in
+  (* Awaitable initialisation *)
+  let mk () = 
+    let nb = Atomic.make_contended 1 in
 
     let computation = P.Computation.create () in
-    let value = ref (Loc.dummy ()) in
-    let hole = Loc.mk value 0 in
+    let value : 'a ref = ref (Loc.dummy ()) in
+    let hole : 'a Loc.t = Loc.mk value 0 in
     let resolve () =
-      apply_links tbl;
-      P.Computation.return computation !value
+      P.Computation.return computation (Loc.get hole)
     in
 
-    let root = { direct_holes ; indirect_counters ; resolve } in
-    let counter = Counter.counter (Root root) 1 in
-    let d = { hole; last_counter = counter; root } in
+    let awaitable = { nb ; resolve } in
+    let d = create_root ~hole ~awaitable in
     d, computation
 end
 
 module Memo = struct
 
-  type ('k, 'a) t = ('k, 'a) memo
+  type ('k, 'a) t = ('k, 'a Destiny.t) H.t
 
-  let init () =
-    let tbl = H.create () in
-    let dangling_links = St.create () in
-    { tbl ; dangling_links }
+  let init = H.create
 
-  let memo (m : _ t) d key f =
+  type 'v add_or_get = Added | Found of 'v
+  let add_or_get tbl k v =
+    if H.try_add tbl k v then
+      Added
+    else
+      Found (H.find_exn tbl k)
+
+  let memo (tbl : _ t) d key f =
     (* Atomically check if [key] has been seen. *)
-    if H.try_add m.tbl key d then
+    match add_or_get tbl key d with
+    | Added ->
       (* It wasn't seen, we have the lock. We can execute f *)
       f key
-    else begin
+    | Found orig ->
       (* It was seen. We can register the link *)
-      let dfirst = H.find_exn m.tbl key in
-      St.push m.dangling_links {first = dfirst.hole ; late = d.hole};
+      Destiny.copy ~orig d.hole;
+      assert (orig.awaitable == d.awaitable);
       Destiny.decr d;
-      if dfirst.root == d.root then
-        ()
-      else begin
-        Counter.register dfirst.last_counter d.root
-      end
-    end
+      ()
 
 end
 
@@ -243,6 +204,12 @@ end
 
 module AsyncFun = struct
 
+  let async f =
+    let c = P.Computation.create () in
+    let fiber = P.Fiber.create ~forbid:false c in
+    P.Fiber.spawn fiber (fun _ -> P.Computation.return c @@ f());
+    c
+  
   let fork f =
     let c = P.Computation.create () in
     let fiber = P.Fiber.create ~forbid:false c in
