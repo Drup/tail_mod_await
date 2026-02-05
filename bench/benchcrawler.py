@@ -13,14 +13,14 @@ fig, axL = plt.subplots()
 # axR = axL.twinx()
 
 # Factor for time (from ns)
-unit="ms"
-factor=1e6
+unit="s"
+factor=1e9
 
 maxcpu = 12
 cpus = numpy.linspace(1, maxcpu, maxcpu)
 
 def select_data(d):
-    return d["Timens"]/d["SizeMB"]/factor
+    return d["Timens"]/factor
 def get_y(d):
     ys = sorted(select_data(d))[1:-1]
     y = numpy.average(ys)
@@ -83,7 +83,7 @@ plt.xlim(1,maxcpu)
 plt.xticks(numpy.arange(1, maxcpu+1, 1))
 
 # axL.set_yscale('log')
-axL.set_ylabel('Time per data ('+unit+'/MB)')
+axL.set_ylabel('Time per data ('+unit+')')
 axL.set_ylim(0, None)
 lines, labels = axL.get_legend_handles_labels()
 axL.legend(lines, labels, loc='upper right')
