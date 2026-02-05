@@ -231,7 +231,7 @@ let cutoff = 10000
 let uri = Uri.canonicalize @@ Uri.of_string Sys.argv.(3)
 
 let size x =
-  float (Obj.reachable_words (Obj.repr x)) /. 1024. /. 1024.
+  float (Obj.reachable_words x) /. 1024. /. 1024.
 
 let go () =
   match mode with
@@ -240,13 +240,13 @@ let go () =
     let q = Queue.create () in
     Queue.push uri q;
     fetch_page_breath g ~base:uri ~cutoff:(ref cutoff) q;
-    size g
+    Obj.repr g
   | "depth" ->
     let g : graph = StringTbl.create 17 in
     let q = Stack.create () in
     Stack.push uri q;
     fetch_page_depth g ~base:uri ~cutoff:(ref cutoff) q;
-    size g
+    Obj.repr g
   | "tree" ->
     let seen = StringTbl.create 17 in
     let root =
@@ -254,7 +254,7 @@ let go () =
       Computation.await @@
       fetch_page_tree seen ~base:uri ~cutoff:(Atomic.make_contended cutoff) uri
     in
-    size root
+    Obj.repr root
   | "graph" ->
     let memo = mk_tbl () in
     let root =
@@ -262,7 +262,7 @@ let go () =
       Computation.await @@
       fetch_page memo ~base:uri ~cutoff:(Atomic.make_contended cutoff) uri
     in
-    size root
+    Obj.repr root
   | _ -> invalid_arg "Wrong mode"
 
 let () =
@@ -271,10 +271,8 @@ let () =
       Uri.pp_hum uri mode n_domains cutoff
   in
   let c = start title in
-  let root_page = go () in
+  let o = go () in
   stop c;
-  Format.printf
-    "%.3F@.@?"
-    (float (Obj.reachable_words (Obj.repr root_page)) /. 1024. /. 1024.) ;
+  Format.printf "%.3F@.@?" (size o);
   (* Inspect.Dot.dump root_page; *)
   ()
