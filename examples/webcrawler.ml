@@ -227,7 +227,7 @@ let stop c =
 
 let mode = Sys.argv.(1) (* "seq" or a number of domains *)
 let n_domains = int_of_string @@ Sys.argv.(2)
-let cutoff = 2000
+let cutoff = 10000
 let uri = Uri.canonicalize @@ Uri.of_string Sys.argv.(3)
 
 let size x =
