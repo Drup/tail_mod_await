@@ -1,6 +1,10 @@
 open Picos
 
-(** The actual crawler *)
+let debug = false
+
+(** Data model and utility functions *)
+
+module K = String
 
 type page =
   | Page of string * string * page list
@@ -62,26 +66,29 @@ let process_links ~base links =
     ) links
   |> List.sort_uniq Uri.compare
 
+let mk_tbl () =
+  Ppx_tmaa_runtime.Memo.init ~hashed_type:(module String) ()
+
 let%async rec fetch_page (tbl[@memo.tbl]) ~base ~cutoff uri =
-  let%memo _uris = Uri.to_string uri in
+  let%memo path = Uri.path uri in
   let n = Atomic.fetch_and_add cutoff (-1) in
   if n < 0 then begin
-    (* Format.eprintf "Cut at %a@." Uri.pp_hum uri; *)
+    if debug then Format.eprintf "Cut at %a@." Uri.pp_hum uri;
     WrongPage ("cutoff")
   end else begin
-    (* Format.eprintf "Fetching %a@." Uri.pp_hum uri; *)
+    if debug then Format.eprintf "Fetching %a@." Uri.pp_hum uri;
     let content = fetch_uri uri in
     match content with
     | Error error -> WrongPage error
     | Ok (Html, content) ->
       let all_links = get_links content in
       let internal_links = process_links ~base all_links in
-      Page (Uri.path uri,
+      Page (path,
             content,
             Computation.await (
               fetch_pages tbl ~base ~cutoff internal_links))
     | Ok (Other, content) ->
-      Page (Uri.path uri, content, [])
+      Page (path, content, [])
 
   end
 
@@ -93,37 +100,181 @@ and fetch_pages tbl ~base ~cutoff links = match links with
        Computation.await (fetch_pages tbl ~base ~cutoff t)
 [@@warning "-32"]
 
+(** Tree version *)
+
+module StringTbl = Hashtbl.Make(String)
+
+let%async rec fetch_page_tree seen ~base ~cutoff uri =
+  let path = Uri.path uri in
+  if StringTbl.mem seen path then
+    WrongPage ("seen")
+  else
+    let n = Atomic.fetch_and_add cutoff (-1) in
+    if n < 0 then begin
+      if debug then Format.eprintf "Cut at %a@." Uri.pp_hum uri;
+      WrongPage ("cutoff")
+    end else begin
+      if debug then Format.eprintf "Fetching %a@." Uri.pp_hum uri;
+      StringTbl.add seen path ();
+      let content = fetch_uri uri in
+      match content with
+      | Error error -> WrongPage error
+      | Ok (Html, content) ->
+        let all_links = get_links content in
+        let internal_links = process_links ~base all_links in
+        Page (Uri.path uri,
+              content,
+              Computation.await (
+                fetch_pages_tree seen ~base ~cutoff internal_links))
+      | Ok (Other, content) ->
+        Page (Uri.path uri, content, [])
+
+  end
+
+and fetch_pages_tree seen ~base ~cutoff links = match links with
+  | [] -> []
+  | h :: t ->
+     Computation.await (fetch_page_tree seen ~base ~cutoff h) ::
+       Computation.await (fetch_pages_tree seen ~base ~cutoff t)
+[@@warning "-32"]
+
+
+(** Sequential versions
+    Builds a table that contains the graph and serves as memoisation.
+    One version in depth-first and the other breath-first
+*)
+
+type page_indir =
+  | Page of string * string * Uri.t list
+  | WrongPage of string
+type graph = page_indir StringTbl.t
+
+let rec fetch_page_breath (g : graph) ~base ~cutoff (q: _ Queue.t) =
+  match Queue.take_opt q with
+  | None -> ()
+  | Some uri when StringTbl.mem g @@ Uri.path uri ->
+    fetch_page_breath g ~base ~cutoff q
+  | Some uri when !cutoff < 0 ->
+    let path = Uri.path uri in
+    StringTbl.add g path @@ WrongPage ("cutoff");
+    fetch_page_breath g ~base ~cutoff q
+  | Some uri -> begin
+      let path = Uri.path uri in
+      decr cutoff;
+      if debug then Format.eprintf "Fetching %a@." Uri.pp_hum uri;
+      let content = fetch_uri uri in
+      let page, follows = match content with
+        | Error error -> WrongPage error, []
+        | Ok (Html, content) ->
+          let all_links = get_links content in
+          let internal_links = process_links ~base all_links in
+          Page (path,
+                content,
+                internal_links),
+          internal_links
+        | Ok (Other, content) ->
+          Page (path, content, []), []
+      in
+      StringTbl.add g path page;
+      Queue.add_seq q @@ List.to_seq follows;
+      fetch_page_breath g ~base ~cutoff q
+    end
+
+
+let rec fetch_page_depth (g : graph) ~base ~cutoff (q: _ Stack.t) =
+  match Stack.pop_opt q with
+  | None -> ()
+  | Some uri when StringTbl.mem g @@ Uri.path uri ->
+    fetch_page_depth g ~base ~cutoff q
+  | Some uri when !cutoff < 0 ->
+    let path = Uri.path uri in
+    StringTbl.add g path @@ WrongPage ("cutoff");
+    fetch_page_depth g ~base ~cutoff q
+  | Some uri -> begin
+      let path = Uri.path uri in
+      decr cutoff;
+      if debug then Format.eprintf "Fetching %a@." Uri.pp_hum uri;
+      let content = fetch_uri uri in
+      let page, follows = match content with
+        | Error error -> WrongPage error, []
+        | Ok (Html, content) ->
+          let all_links = get_links content in
+          let internal_links = process_links ~base all_links in
+          Page (path,
+                content,
+                internal_links),
+          internal_links
+        | Ok (Other, content) ->
+          Page (path, content, []), []
+      in
+      StringTbl.add g path page;
+      Stack.add_seq q @@ List.to_seq follows;
+      fetch_page_depth g ~base ~cutoff q
+    end
+
 
 (** Run everything *)
 
-let start _s = 
-  (* print_endline ("Launching "^s); *)
+let start s = 
+  Format.eprintf "Launching %s@.@?" s;
   Mtime_clock.counter ()
 let stop c =
   Gc.full_major ();
   let t = Mtime_clock.count c in
-  Format.printf "%a\t%f\t"
+  Format.printf "%a,%f,"
     Mtime.Span.pp t
     (Mtime.Span.to_float_ns t)
 
-let n_domains = int_of_string Sys.argv.(1)
-let cutoff = Atomic.make_contended 10000
+let mode = Sys.argv.(1) (* "seq" or a number of domains *)
+let n_domains = int_of_string @@ Sys.argv.(2)
+let cutoff = 2000
+let uri = Uri.canonicalize @@ Uri.of_string Sys.argv.(3)
 
-let main () =
-  let uri = Uri.canonicalize @@ Uri.of_string Sys.argv.(2) in
+let size x =
+  float (Obj.reachable_words (Obj.repr x)) /. 1024. /. 1024.
+
+let go () =
+  match mode with
+  | "breath" ->
+    let g : graph = StringTbl.create 17 in
+    let q = Queue.create () in
+    Queue.push uri q;
+    fetch_page_breath g ~base:uri ~cutoff:(ref cutoff) q;
+    size g
+  | "depth" ->
+    let g : graph = StringTbl.create 17 in
+    let q = Stack.create () in
+    Stack.push uri q;
+    fetch_page_depth g ~base:uri ~cutoff:(ref cutoff) q;
+    size g
+  | "tree" ->
+    let seen = StringTbl.create 17 in
+    let root =
+      Picos_mux_multififo.run_on ~n_domains @@ fun () ->
+      Computation.await @@
+      fetch_page_tree seen ~base:uri ~cutoff:(Atomic.make_contended cutoff) uri
+    in
+    size root
+  | "graph" ->
+    let memo = mk_tbl () in
+    let root =
+      Picos_mux_multififo.run_on ~n_domains @@ fun () ->
+      Computation.await @@
+      fetch_page memo ~base:uri ~cutoff:(Atomic.make_contended cutoff) uri
+    in
+    size root
+  | _ -> invalid_arg "Wrong mode"
+
+let () =
   let title =
-    Format.asprintf "Webcrawler at %a with %i domains and cutoff=%i"
-      Uri.pp_hum uri n_domains (Atomic.get cutoff)
+    Format.asprintf "Webcrawler at %a with mode=%s, node=%i, cutoff=%i"
+      Uri.pp_hum uri mode n_domains cutoff
   in
   let c = start title in
-  let memo = Ppx_tmaa_runtime.Memo.init () in
-  let root_page = Computation.await @@ fetch_page memo ~base:uri ~cutoff uri in
+  let root_page = go () in
   stop c;
   Format.printf
     "%.3F@.@?"
     (float (Obj.reachable_words (Obj.repr root_page)) /. 1024. /. 1024.) ;
   (* Inspect.Dot.dump root_page; *)
   ()
-
-let () =
-  Picos_mux_multififo.run_on ~n_domains main
