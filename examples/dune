@@ -40,6 +40,12 @@
 (executable
  (name webcrawler)
  (preprocess (pps ppx_tmaa ppx_deriving.eq ppx_deriving.show))
- (libraries picos_mux.multififo uri ezcurl lambdasoup inspect)
+ (libraries
+   picos_mux.multififo uri mtime.clock
+   lambdasoup
+   ; inspect
+   ; picos_io_cohttp
+   ezcurl
+ )
  (modules webcrawler)
 )
