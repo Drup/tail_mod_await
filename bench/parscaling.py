@@ -2,7 +2,6 @@ import matplotlib.pyplot as plt
 import numpy
 import json
 import sys
-from math import sqrt
 
 # Load JSON data from a file
 print("file", sys.argv[1])

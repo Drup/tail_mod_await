@@ -120,7 +120,7 @@ let main () =
   let root_page = Computation.await @@ fetch_page memo ~base:uri ~cutoff uri in
   stop c;
   Format.printf
-    "%.3FMb@.@?"
+    "%.3F@.@?"
     (float (Obj.reachable_words (Obj.repr root_page)) /. 1024. /. 1024.) ;
   (* Inspect.Dot.dump root_page; *)
   ()
