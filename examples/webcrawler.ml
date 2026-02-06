@@ -63,13 +63,14 @@ let process_links ~hosts ~base links =
         Uri.resolve "http" base link
         |> Uri.with_uri ~query:None ~fragment:None
       in
-      let host = Uri.host_with_default ?default:(Uri.host base) link in
-      if Array.mem host hosts then
-        Some (pick_random_host hosts link)
+      let base_host = Uri.host base in
+      if Uri.host link = base_host then
+        Some link
       else
         None
     ) links
   |> List.sort_uniq Uri.compare
+  |> List.map (pick_random_host hosts)
 
 let mk_tbl () =
   Ppx_tmaa_runtime.Memo.init ~hashed_type:(module String) ()
@@ -232,7 +233,7 @@ let stop c =
 
 let mode = Sys.argv.(1) (* "seq" or a number of domains *)
 let n_domains = int_of_string @@ Sys.argv.(2)
-let cutoff = 1000
+let cutoff = 10000
 let uri = Uri.canonicalize @@ Uri.of_string Sys.argv.(4)
 let hosts = Array.of_list @@ String.split_on_char ',' Sys.argv.(3)
 
