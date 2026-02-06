@@ -76,14 +76,14 @@ for mode, color, marker in par_series:
                  marker=marker,
                  label=label, color=color)
     
-plt.title('Webcrawler fetching 10000 pages')
+plt.title('Webcrawler fetching 10k pages')
 
 plt.xlabel('Parallelism factor')
 plt.xlim(1,maxcpu)
 plt.xticks(numpy.arange(1, maxcpu+1, 1))
 
 # axL.set_yscale('log')
-axL.set_ylabel('Time per data ('+unit+')')
+axL.set_ylabel('Time ('+unit+')')
 axL.set_ylim(0, None)
 lines, labels = axL.get_legend_handles_labels()
 axL.legend(lines, labels, loc='upper right')
