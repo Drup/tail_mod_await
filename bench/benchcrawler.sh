@@ -22,7 +22,7 @@ do
     do
         printf "+"
         printf "${mode},${round},${cpus}," >> $OUT
-        $BIN $mode ${cpus} $URL >> webcrawler.csv
+        $BIN $mode ${cpus} $URL >> $OUT
     done
     printf "/\n"
 done
@@ -36,7 +36,7 @@ do
         do
             printf "+"
             printf "${mode},${round},${cpus}," >> $OUT
-            $BIN $mode ${cpus} $URL >> webcrawler.csv
+            $BIN $mode ${cpus} $URL >> $OUT
         done
         printf "/\n"
     done
