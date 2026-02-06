@@ -22,7 +22,7 @@ cpus = numpy.linspace(1, maxcpu, maxcpu)
 def select_data(d):
     return d["Timens"]/factor
 def get_y(d):
-    ys = sorted(select_data(d))[1:-1]
+    ys = sorted(select_data(d))
     y = numpy.average(ys)
     errmin = y-min(ys)
     errmax = max(ys)-y
@@ -48,10 +48,11 @@ for mode, color, marker in seq_series:
 # axL.plot(ideal_x, ideal_y, linestyle='dotted', label='Ideal time (1/n)', color='black')
 
 par_series = [
-    ("tree", "green", ","),
-    ("graph", "red", ","),
+    ("tree", "green", ",", "-"),
+    ("graph", "red", ",", "-"),
+    ("graphMulti", "red", ",", "--"),
     ]
-for mode, color, marker in par_series:
+for mode, color, marker, linestyle in par_series:
     label = "Async "+ mode
     d = data[data["Mode"] == mode]
     time = list()
@@ -74,7 +75,7 @@ for mode, color, marker in par_series:
                  time,
                  yerr=(yerrL,yerrU),
                  marker=marker,
-                 label=label, color=color)
+                 label=label, color=color, linestyle=linestyle)
     
 plt.title('Webcrawler fetching 10k pages')
 
