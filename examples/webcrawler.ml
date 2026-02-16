@@ -7,7 +7,7 @@ let debug = false
 module K = String
 
 type page =
-  | Page of string * string * page list
+  | Page of Uri.t * string * page list
   | WrongPage of string
 [@@deriving eq, show { with_path = false }]
 
@@ -66,30 +66,29 @@ let process_links ~base links =
     ) links
   |> List.sort_uniq Uri.compare
 
+let get_internal_links base content =
+  process_links ~base @@ get_links content
+
 let mk_tbl () =
   Ppx_tmaa_runtime.Memo.init ~hashed_type:(module String) ()
 
 let%async rec fetch_page (tbl[@memo.tbl]) ~base ~cutoff uri =
-  let%memo path = Uri.path uri in
+  let%memo _path = Uri.path uri in
   let n = Atomic.fetch_and_add cutoff (-1) in
   if n < 0 then begin
     if debug then Format.eprintf "Cut at %a@." Uri.pp_hum uri;
     WrongPage ("cutoff")
   end else begin
     if debug then Format.eprintf "Fetching %a@." Uri.pp_hum uri;
-    let content = fetch_uri uri in
-    match content with
+    match fetch_uri uri with
     | Error error -> WrongPage error
-    | Ok (Html, content) ->
-      let all_links = get_links content in
-      let internal_links = process_links ~base all_links in
-      Page (path,
-            content,
-            Computation.await (
-              fetch_pages tbl ~base ~cutoff internal_links))
-    | Ok (Other, content) ->
-      Page (path, content, [])
-
+    | Ok (content_type, content) ->
+      let links = match content_type with
+        | Html -> get_internal_links base content
+        | Other -> []
+      in
+      Page (uri, content,
+            Computation.await (fetch_pages tbl ~base ~cutoff links))
   end
 
 
@@ -102,11 +101,11 @@ and fetch_pages tbl ~base ~cutoff links = match links with
 
 (** Tree version *)
 
-module StringTbl = Hashtbl.Make(String)
+module H = Saturn.Htbl
 
 let%async rec fetch_page_tree seen ~base ~cutoff uri =
   let path = Uri.path uri in
-  if StringTbl.mem seen path then
+  if not (H.try_add seen path ()) then
     WrongPage ("seen")
   else
     let n = Atomic.fetch_and_add cutoff (-1) in
@@ -115,21 +114,17 @@ let%async rec fetch_page_tree seen ~base ~cutoff uri =
       WrongPage ("cutoff")
     end else begin
       if debug then Format.eprintf "Fetching %a@." Uri.pp_hum uri;
-      StringTbl.add seen path ();
-      let content = fetch_uri uri in
-      match content with
+      match fetch_uri uri with
       | Error error -> WrongPage error
       | Ok (Html, content) ->
-        let all_links = get_links content in
-        let internal_links = process_links ~base all_links in
-        Page (Uri.path uri,
+        let uris = get_internal_links base content in
+        Page (uri,
               content,
               Computation.await (
-                fetch_pages_tree seen ~base ~cutoff internal_links))
+                fetch_pages_tree seen ~base ~cutoff uris))
       | Ok (Other, content) ->
-        Page (Uri.path uri, content, [])
-
-  end
+        Page (uri, content, [])
+    end
 
 and fetch_pages_tree seen ~base ~cutoff links = match links with
   | [] -> []
@@ -138,18 +133,48 @@ and fetch_pages_tree seen ~base ~cutoff links = match links with
        Computation.await (fetch_pages_tree seen ~base ~cutoff t)
 [@@warning "-32"]
 
+(** Manual versions
+    Builds a table that contains the graph and serves as memoisation.
+*)
+type page_indir =
+  | Page of Uri.t * string * Uri.t list
+  | WrongPage of string
+  | Placeholder
+type graph = (string, page_indir) H.t
+
+let rec fetch_page_async_manual (g : graph) ~base ~cutoff uri =
+  let path = Uri.path uri in
+  if H.try_add g path Placeholder then
+    let n = Atomic.fetch_and_add cutoff (-1) in
+    let v, next = if n < 0 then begin
+        if debug then Format.eprintf "Cut at %a@." Uri.pp_hum uri;
+        WrongPage ("cutoff"), []
+      end else begin
+        if debug then Format.eprintf "Fetching %a@." Uri.pp_hum uri;
+        match fetch_uri uri with
+        | Ok (Html, content) ->
+          let uris = get_internal_links base content in
+          Page (uri, content, uris), uris
+        | Ok (Other, content) ->
+          Page (uri, content, []), []
+        | Error error ->
+          WrongPage error, []
+      end
+    in
+    let _ = H.set_exn g path v in
+    List.iter (fun uri ->
+        Ppx_tmaa_runtime.AsyncFun.fork @@ fun () ->
+        fetch_page_async_manual g ~base ~cutoff uri)
+      next
 
 (** Sequential versions
     Builds a table that contains the graph and serves as memoisation.
     One version in depth-first and the other breath-first
 *)
 
-type page_indir =
-  | Page of string * string * Uri.t list
-  | WrongPage of string
-type graph = page_indir StringTbl.t
+module StringTbl = Hashtbl.Make(String)
 
-let rec fetch_page_breath (g : graph) ~base ~cutoff (q: _ Queue.t) =
+let rec fetch_page_breath g ~base ~cutoff (q: _ Queue.t) =
   match Queue.take_opt q with
   | None -> ()
   | Some uri when StringTbl.mem g @@ Uri.path uri ->
@@ -162,18 +187,13 @@ let rec fetch_page_breath (g : graph) ~base ~cutoff (q: _ Queue.t) =
       let path = Uri.path uri in
       decr cutoff;
       if debug then Format.eprintf "Fetching %a@." Uri.pp_hum uri;
-      let content = fetch_uri uri in
-      let page, follows = match content with
-        | Error error -> WrongPage error, []
+      let page, follows = match fetch_uri uri with
         | Ok (Html, content) ->
-          let all_links = get_links content in
-          let internal_links = process_links ~base all_links in
-          Page (path,
-                content,
-                internal_links),
-          internal_links
+          let uris = get_internal_links base content in
+          Page (uri, content, uris), uris
         | Ok (Other, content) ->
-          Page (path, content, []), []
+          Page (uri, content, []), []
+        | Error error -> WrongPage error, []
       in
       StringTbl.add g path page;
       Queue.add_seq q @@ List.to_seq follows;
@@ -181,7 +201,7 @@ let rec fetch_page_breath (g : graph) ~base ~cutoff (q: _ Queue.t) =
     end
 
 
-let rec fetch_page_depth (g : graph) ~base ~cutoff (q: _ Stack.t) =
+let rec fetch_page_depth g ~base ~cutoff (q: _ Stack.t) =
   match Stack.pop_opt q with
   | None -> ()
   | Some uri when StringTbl.mem g @@ Uri.path uri ->
@@ -194,18 +214,13 @@ let rec fetch_page_depth (g : graph) ~base ~cutoff (q: _ Stack.t) =
       let path = Uri.path uri in
       decr cutoff;
       if debug then Format.eprintf "Fetching %a@." Uri.pp_hum uri;
-      let content = fetch_uri uri in
-      let page, follows = match content with
+      let page, follows = match fetch_uri uri with
         | Error error -> WrongPage error, []
         | Ok (Html, content) ->
-          let all_links = get_links content in
-          let internal_links = process_links ~base all_links in
-          Page (path,
-                content,
-                internal_links),
-          internal_links
+          let uris = get_internal_links base content in
+          Page (uri, content, uris), uris
         | Ok (Other, content) ->
-          Page (path, content, []), []
+          Page (uri, content, []), []
       in
       StringTbl.add g path page;
       Stack.add_seq q @@ List.to_seq follows;
@@ -236,19 +251,26 @@ let size x =
 let go () =
   match mode with
   | "breath" ->
-    let g : graph = StringTbl.create 17 in
+    let g = StringTbl.create 17 in
     let q = Queue.create () in
     Queue.push uri q;
     fetch_page_breath g ~base:uri ~cutoff:(ref cutoff) q;
     Obj.repr g
   | "depth" ->
-    let g : graph = StringTbl.create 17 in
+    let g = StringTbl.create 17 in
     let q = Stack.create () in
     Stack.push uri q;
     fetch_page_depth g ~base:uri ~cutoff:(ref cutoff) q;
     Obj.repr g
+  | "manual" ->
+    let g = H.create ~hashed_type:(module String) () in
+    let () =
+      Picos_mux_multififo.run_on ~n_domains @@ fun () ->
+      fetch_page_async_manual g ~base:uri ~cutoff:(Atomic.make_contended cutoff) uri
+    in
+    Obj.repr g
   | "tree" ->
-    let seen = StringTbl.create 17 in
+    let seen = H.create ~hashed_type:(module String) () in
     let root =
       Picos_mux_multififo.run_on ~n_domains @@ fun () ->
       Computation.await @@

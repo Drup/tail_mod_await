@@ -27,7 +27,7 @@ do
     printf "/\n"
 done
 
-for mode in "tree" "graph"
+for mode in "tree" "graph" "manual"
 do
     for cpus in $(seq 1 $NBCPUS)
     do
