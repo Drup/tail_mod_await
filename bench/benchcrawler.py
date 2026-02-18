@@ -50,9 +50,9 @@ ideal_y = baseline/ideal_x
 axL.plot(ideal_x, ideal_y, linestyle='dotted', label='Ideal time (seq/n)', color='black')
 
 par_series = [
-    ("tree", "asyncpar_tree_tmca", "blue", "--"),
+    # ("tree", "asyncpar_tree_tmca", "blue", "--"),
     ("graph", "asyncpar_graph_tmca", "red", "--"),
-    ("manual", "asyncpar_manual", "red", "-"),
+    ("manual", "asyncpar_manual", "blue", "-"),
     ]
 for mode, label, color, linestyle in par_series:
     d = data[data["Mode"] == mode]
@@ -91,12 +91,12 @@ plt.xticks(numpy.arange(1, maxcpu+1, 1))
 axL.set_ylabel('Time ('+unit+')')
 axL.set_ylim(0, None)
 lines, labels = axL.get_legend_handles_labels()
-axL.legend(lines, labels, loc='upper left')
+axL.legend(lines, labels, loc='upper left', bbox_to_anchor=(0.05, 1))
 
 axR.set_ylabel('Overhead relative to ideal speedup (%)')
 axR.set_ylim(0, 90)
 lines2, labels2 = axR.get_legend_handles_labels()
-axR.legend(lines2, labels2, loc='lower right')
+axR.legend(lines2, labels2, loc='lower right', bbox_to_anchor=(0.95, 0))
 
 plt.grid()
 
