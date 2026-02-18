@@ -41,8 +41,10 @@
  (name webcrawler)
  (preprocess (pps ppx_tmaa ppx_deriving.eq ppx_deriving.show))
  (libraries
-   picos_mux.multififo uri mtime.clock
+   picos uri mtime.clock
    lambdasoup
+   moonpool
+   ; picos_mux.multififo
    ; inspect
    ; picos_io_cohttp
    ezcurl
