@@ -16,12 +16,12 @@ axR = axL.twinx()
 
 names = [
     # ("map_tmc", "black", "-"),
-    # ("map_async", "blue", "-"),
-    # ("map_async_tmca", "blue", "--"),
-    ("map_asyncpar_width", "red", "-"),
-    ("map_asyncpar_width_tmca", "red", "--"),
-    ("map_asyncpar_full", "green", "-"),
-    ("map_asyncpar_full_tmca", "green", "--"),
+    # ("map_async", "red", "-"),
+    # ("map_async_tmca", "red", "--"),
+    ("map_asyncpar_width", "blue", "-"),
+    ("map_asyncpar_width_tmca", "blue", "--"),
+    # ("map_asyncpar_full", "green", "-"),
+    # ("map_asyncpar_full_tmca", "green", "--"),
     ]
 
 

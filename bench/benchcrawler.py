@@ -10,7 +10,7 @@ data = numpy.genfromtxt(file, delimiter=",", names=True, dtype=None)
 
 fig, axL = plt.subplots()
 
-# axR = axL.twinx()
+axR = axL.twinx()
 
 # Factor for time (from ns)
 unit="s"
@@ -29,11 +29,10 @@ def get_y(d):
     return (y, errmin, errmax)
 
 seq_series=[
-    ("breath", "blue", ","),
-    ("depth", "black", ","),
+    ("breath", "seq_manual", "black", ","),
+    # ("depth", "seq_depth", "green", ","),
     ]
-for mode, color, marker in seq_series:
-    label= "Seq "+ mode
+for mode, label, color, marker in seq_series:
     y, errmin, errmax = get_y(data[data["Mode"] == mode])
     axL.errorbar(cpus,
              [y]*maxcpu,
@@ -43,16 +42,19 @@ for mode, color, marker in seq_series:
              marker=marker
              )
 
-# ideal_x = numpy.linspace(1, maxcpu, 100)
-# ideal_y = baseline/ideal_xq
-# axL.plot(ideal_x, ideal_y, linestyle='dotted', label='Ideal time (1/n)', color='black')
+basemode = "breath"
+baseline, _, _ = get_y(data[data["Mode"] == basemode])
+
+ideal_x = numpy.linspace(1, maxcpu, 100)
+ideal_y = baseline/ideal_x
+axL.plot(ideal_x, ideal_y, linestyle='dotted', label='Ideal time (seq/n)', color='black')
 
 par_series = [
-    ("tree", "green", ","),
-    ("graph", "red", ","),
+    ("tree", "asyncpar_tree_tmca", "blue", "--"),
+    ("graph", "asyncpar_graph_tmca", "red", "--"),
+    ("manual", "asyncpar_manual", "red", "-"),
     ]
-for mode, color, marker in par_series:
-    label = "Async "+ mode
+for mode, label, color, linestyle in par_series:
     d = data[data["Mode"] == mode]
     time = list()
     # for cpu in cpus:
@@ -65,16 +67,19 @@ for mode, color, marker in par_series:
     time = list()
     yerrU = list()
     yerrL = list()
+    overhead = list()
     for cpu in cpus:
         t, errmin, errmax = get_y(d[d["CPUs"] == cpu])
         time.append(t)
         yerrU.append(errmin)
         yerrL.append(errmax)
+        overhead.append(t*cpu/baseline*100-100)
     axL.errorbar(cpus,
                  time,
                  yerr=(yerrL,yerrU),
-                 marker=marker,
+                 linestyle=linestyle,
                  label=label, color=color)
+    axR.plot(cpus, overhead, linestyle=linestyle, label=(label+" Overhead"), color=color, marker=".")
     
 plt.title('Webcrawler fetching 10k pages')
 
@@ -86,12 +91,12 @@ plt.xticks(numpy.arange(1, maxcpu+1, 1))
 axL.set_ylabel('Time ('+unit+')')
 axL.set_ylim(0, None)
 lines, labels = axL.get_legend_handles_labels()
-axL.legend(lines, labels, loc='upper right')
+axL.legend(lines, labels, loc='upper left')
 
-# axR.set_ylabel('Overhead relative to ideal speedup (%)')
-# axR.set_ylim(0, 90)
-# lines2, labels2 = axR.get_legend_handles_labels()
-# axR.legend(lines2, labels2, loc='lower right')
+axR.set_ylabel('Overhead relative to ideal speedup (%)')
+axR.set_ylim(0, 90)
+lines2, labels2 = axR.get_legend_handles_labels()
+axR.legend(lines2, labels2, loc='lower right')
 
 plt.grid()
 
