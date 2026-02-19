@@ -248,14 +248,14 @@ let uri = Uri.canonicalize @@ Uri.of_string Sys.argv.(3)
 let size x =
   float (Obj.reachable_words x) /. 1024. /. 1024.
 
-let run f =
-  let pool = Moonpool.Ws_pool.create ~num_threads:n_domains () in
-  let v = Moonpool.Runner.run_wait_block pool f in
-  Moonpool.Runner.shutdown pool;
-  v
-
 (* let run f = *)
-(*   Picos_mux_multififo.run_on ~n_domains f *)
+(*   let pool = Moonpool.Ws_pool.create ~num_threads:n_domains () in *)
+(*   let v = Moonpool.Runner.run_wait_block pool f in *)
+(*   Moonpool.Runner.shutdown pool; *)
+(*   v *)
+
+let run f =
+  Picos_mux_multififo.run_on ~n_domains f
 
 let go () =
   match mode with

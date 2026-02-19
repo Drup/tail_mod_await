@@ -43,8 +43,8 @@
  (libraries
    picos uri mtime.clock
    lambdasoup
-   moonpool
-   ; picos_mux.multififo
+   ; moonpool
+   picos_mux.multififo
    ; inspect
    ; picos_io_cohttp
    ezcurl
