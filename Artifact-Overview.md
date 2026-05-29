@@ -43,7 +43,7 @@ For benchmarks:
 
 ## Getting Started
 
-### Installation from scratch (Without docker)
+### Installation from scratch
 
 With opam installed (takes around 10 minutes):
 
@@ -54,17 +54,6 @@ opam install --deps --with-test path/to/artifact # Install all the dependencies
 ```
 
 Exact dependencies can be found in [ppx_tmaa.opam](ppx_tmaa.opam).
-
-### Docker-specific instructions
-
-This artifact is shipped with a docker image [tail-mod-await-image.tar](tail-mod-await-image.tar).
-
-To run it:
-
-```
-docker load < tail-mod-await-image.tar.gz
-docker run -it tail-mod-await-image:latest
-```
 
 ### Basic Usage
 
@@ -165,5 +154,3 @@ make membench
 ```
 
 and printed on Stdout
-
-
