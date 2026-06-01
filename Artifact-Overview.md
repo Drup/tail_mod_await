@@ -40,6 +40,7 @@ For benchmarks:
 - jq
 - python
 - mathplotlib
+- kiwix (particularly 'kiwix-serve', usually from a 'kiwix-tools' package)
 
 ## Getting Started
 
@@ -122,9 +123,9 @@ of all the functions. It is run by
 sh bench/runbench.sh
 ```
 
-These benchmarks are currently configured for a 12-core machine with 32GB of RAM, and are expected
-to take several hours to run. The number of parallel domains and size of the test cases can be
-adapted at the top of each `.ml` file of the different benchmarks
+These benchmarks are currently configured to run in the provided VM, with 4 cores and 4GB of RAM,
+and are expected to take several hours to run. The number of parallel domains and size of the test
+cases can be adapted at the top of each `.ml` file of the different benchmarks
 
 
 After the benchmarks are done, the results can be compiled into graphs using
@@ -139,6 +140,27 @@ sh bench/processdata.sh
 
 Full explanations of these results can be found in the paper
 
+### Webcrawler benchmark
+
+This corresponds to paragraph 5.3.3 "A case study: the webcrawler" in Section 5.3
+
+The script [run_webcrawler_bench.sh](run_webcrawler_bench.sh) runs several variants of a webcrawler
+on the provided ZIM file [../wikipedia_en_top_mini_2025-12.zim](../wikipedia_en_top_mini_2025-12.zim) used for our
+evaluation. The script is to be ran from the present directory and accepts the following arguments:
+
+```
+sh run_webcrwaler_bench.sh <number of cpus> <repeats> <server address>
+```
+
+where:
+- `<number of cpus>` denotes the maximum number of parallel domains for the parallel webcrawler
+  (default 4)
+- `<repeats>` the number of repeats per run (default 2)
+- `<server address>` the address of a running kiwix server listening on port 8080, serving the
+  provided ZIM file
+
+If ran without arguments, the script will run the necessary kiwix server (assuming the ZIM file is
+in the parent of the current directory), then run benchmarks with default values.
 
 ### Memory measurements
 

@@ -1,11 +1,10 @@
 #!/bin/bash
-set -e
-NBCPUS=$1
-REPEATS=$2
-HOST=$3
+NBCPUS=${1:-4}
+REPEATS=${2:-2}
+HOST=${3:-localhost}
 
-if [-z ${HOST+x}]; then
-   kiwix-serve -p 8080 -d ../wikipedia_en_top_mini_2025-12;
+if [ "$HOST" == "localhost" ]; then
+   kiwix-serve -p 8080 -d ../wikipedia_en_top_mini_2025-12.zim
 fi
 
-bench/benchcrawler.sh ${NBCPUS:-8} ${REPEATS:-4} ${HOST:-localhost}
+bash bench/benchcrawler.sh $NBCPUS $REPEATS $HOST
