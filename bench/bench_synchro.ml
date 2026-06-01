@@ -1,6 +1,6 @@
 let n_domains = 4 (** Degree of parallelism *)
 let seed = 123456 (** Seed for random tree gen. *)
-let size = 10000 (** Tree size *)
+let size = 5000 (** Tree size *)
 
 let () =
   Fmt.pr "Configuration: %d domains, %d seed, %d tree size@."
@@ -24,19 +24,19 @@ let applied_fun i x =
   for _ = 0 to int_of_float (x *. float i) do incr r done;
   !r
 
-let bench_tree_sync name f = 
+let bench_tree_sync name f =
   Test.make_indexed ~name ~fmt:"%s %d"
     ~args
     (fun i -> Staged.stage @@ fun () -> f (applied_fun i) tree)
 
-let bench_tree_async name f = 
+let bench_tree_async name f =
   Test.make_indexed ~name ~fmt:"%s %d"
     ~args
     (fun i -> Staged.stage @@ fun () -> Computation.await @@ f (applied_fun i) tree)
 
 let indexed_benchs =
-  let test_naive = bench_tree_sync "map" map in 
-  let test_tmc = bench_tree_sync "map_tmc" map_tmc in 
+  let test_naive = bench_tree_sync "map" map in
+  let test_tmc = bench_tree_sync "map_tmc" map_tmc in
   let test_seq = bench_tree_async "map_async" map_async in
   let test_par_width = bench_tree_async "map_asyncpar_width" map_asyncpar_width in
   let test_par_full = bench_tree_async "map_asyncpar_full" map_asyncpar_full in

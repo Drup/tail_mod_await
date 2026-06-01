@@ -1,7 +1,7 @@
 let max_parallelism = Domain.recommended_domain_count () (** Maximum number of cores *)
 let seed = 123456 (** Seed for random tree gen. *)
-let size = 10000 (** Tree size *)
-let iterations = 20000. (** Number of iterations *)
+let size = 5000 (** Tree size *)
+let iterations = 10000. (** Number of iterations *)
 
 let () =
   Fmt.pr "Configuration: %d domains, %d seed, %d tree size, %f iterations@."
@@ -29,7 +29,7 @@ let bench_tree_sync name f =
     ~args
     (fun _i -> Staged.stage @@ fun () -> f applied_fun tree)
 
-let bench_tree_async name f = 
+let bench_tree_async name f =
   Test.make_indexed_with_resource ~name ~fmt:"%s %d"
     ~args
     ~allocate:(fun i ->
@@ -53,7 +53,7 @@ let indexed_benchs =
   Test.make_grouped ~name:"tree bench" ~fmt:"%s %s"
     [ test_tmc;
       (* test_seq; test_seq_tmca; *)
-      test_par_width; test_par_width_tmca; 
+      test_par_width; test_par_width_tmca;
       test_par_full; test_par_full_tmca;
     ]
 

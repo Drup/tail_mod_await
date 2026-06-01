@@ -67,7 +67,8 @@ Run tests with `make test`.
 ### Running and Playing with Examples
 
 Examples are in [examples/](examples/).
-In particular, [examples/tree_map_annotated.ml](examples/tree_map_annotated.ml) contains a fully annotated example with detail explanations and comparison of our transformation.
+In particular, [examples/tree_map_annotated.ml](examples/tree_map_annotated.ml) contains a fully
+annotated example with detail explanations and comparison of our transformation.
 
 To run one specific examples:
 
@@ -75,14 +76,10 @@ To run one specific examples:
 dune exec examples/THEEXAMPLE.exe
 ```
 
-The example [examples/icfp_example.ml](examples/icf_example.ml) contains
-detailed step by step instructions on how the transformation works, and
-how to use it.
-
 To observe the output of the ppx transformation directly:
 
 ```
-dune describe pp examples/THEEXAMPLE.exe
+dune describe pp examples/THEEXAMPLE.ml
 ```
 
 You can modify the examples and add new examples freely. If you add new
@@ -108,7 +105,8 @@ expect test of the following format:
 [%expect EXPECTED TRANSFORMED CODE]
 ```
 
-This allow to observe in a more isolated fashion the code and its transformation, along with various corner cases.
+This allow to observe in a more isolated fashion the code and its transformation, along with various
+corner cases.
 
 ### Performance measurements
 
@@ -124,7 +122,7 @@ sh bench/runbench.sh
 ```
 
 These benchmarks are currently configured to run in the provided VM, with 4 cores and 4GB of RAM,
-and are expected to take several hours to run. The number of parallel domains and size of the test
+and are expected to take about 1h30 to run. The number of parallel domains and size of the test
 cases can be adapted at the top of each `.ml` file of the different benchmarks
 
 

@@ -1,6 +1,6 @@
 let n_domains = 4 (** Degree of parallelism *)
 let seed = 123456 (** Seed for random tree gen. *)
-let iterations = 20000. (** Number of iterations *)
+let iterations = 10000. (** Number of iterations *)
 
 let () =
   Fmt.pr "Configuration: %d domains, %d seed, %f iterations@."
@@ -25,14 +25,14 @@ let applied_fun x =
   for _ = 0 to int_of_float (x *. iterations) do incr r done;
   !r
 
-let bench_tree_sync name f = 
+let bench_tree_sync name f =
   Test.make_indexed ~name ~fmt:"%s %d"
     ~args
     (fun size ->
        Staged.stage @@ fun () ->
        f applied_fun @@ Hashtbl.find trees size)
 
-let bench_tree_async name f = 
+let bench_tree_async name f =
   Test.make_indexed ~name ~fmt:"%s %d"
     ~args
     (fun size ->
@@ -41,7 +41,7 @@ let bench_tree_async name f =
 
 let indexed_benchs =
   let test_naive = bench_tree_sync "map" map in
-  let test_tmc = bench_tree_sync "map_tmc" map_tmc in 
+  let test_tmc = bench_tree_sync "map_tmc" map_tmc in
   let test_seq = bench_tree_async "map_async" map_async in
   let test_par_width = bench_tree_async "map_asyncpar_width" map_asyncpar_width in
   let test_par_full = bench_tree_async "map_asyncpar_full" map_asyncpar_full in
