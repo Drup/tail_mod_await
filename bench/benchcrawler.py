@@ -23,9 +23,9 @@ def select_data(d):
 def get_y(d):
     ys = sorted(select_data(d))[1:-1]
     y = numpy.average(ys)
-    errmin = y-min(ys)
-    errmax = max(ys)-y
-    return (y, errmin, errmax)
+    ymin = min(ys)
+    ymax = max(ys)
+    return (y, ymin, ymax)
 
 
 ideal_x = numpy.linspace(1, maxcpu, 100)
@@ -56,10 +56,11 @@ for mode, label, color, linestyle in par_series:
     yerrU = list()
     yerrL = list()
     for cpu in cpus:
-        t, errmin, errmax = get_y(d[d["CPUs"] == cpu])
+        t, tmin, tmax = get_y(d[d["CPUs"] == cpu])
         time.append(baseline/t)
-        yerrU.append(0)
-        yerrL.append(0)
+        yerrU.append(baseline/tmin)
+        yerrL.append(baseline/tmax)
+    plt.fill_between(cpus, yerrU, yerrL, color=color, alpha=0.3)
     plt.plot(cpus,
              time,
              linestyle=linestyle,

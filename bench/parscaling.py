@@ -40,7 +40,13 @@ for name, color, linestyle in names:
             for elt in json_data if elt["name"] == xname]
     sort_data = sorted(data, key=lambda d: d[0])
     xx, _, _ = zip(*sort_data)
-    scaling = [ T_1/T_p for _,T_p,_ in sort_data ]
+    yy = [ T_p for _,T_p,_ in sort_data ]
+    Tmin = [ T_p-sqrt(T_p * (1 - c)) for _, T_p, c in sort_data ]
+    Tmax = [ T_p+sqrt(T_p * (1 - c)) for _, T_p, c in sort_data ]
+    scaling = [ T_1/T_p for T_p in yy ]
+    scalingmin = [ T_1/T_p for T_p in Tmin ]
+    scalingmax = [ T_1/T_p for T_p in Tmax ]
+    plt.fill_between(xx, scalingmin, scalingmax, color=color, alpha=0.3)
     plt.plot(xx, scaling, linestyle=linestyle, label=name, color=color)
     
 plt.title('Map on a tree of $N=10000$ elements with a loop of $l=20000$ iterations')
