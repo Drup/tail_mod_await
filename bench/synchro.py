@@ -35,11 +35,6 @@ for name, color, linestyle in names:
     ymax = [ y+sqrt(y * (1 - c)) for _, y, c in sort_data ]
     plt.fill_between(x, ymin, ymax, color=color, alpha=0.3)
     plt.plot(x, y, linestyle=linestyle, label=name, color=color)
-    # plt.errorbar(x, y, yerr=error,
-    #              linestyle=linestyle, label=name, color=color,
-    #              elinewidth=1,
-    #              capsize=3,
-    #              )
 
 plt.title('Map on a tree of $N=5000$ elements on $p=4$ CPUs')
 
