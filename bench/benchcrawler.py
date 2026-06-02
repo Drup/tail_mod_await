@@ -10,17 +10,16 @@ data = numpy.genfromtxt(file, delimiter=",", names=True, dtype=None)
 
 fig, axL = plt.subplots()
 
-axR = axL.twinx()
-
-# Factor for time (from ns)
-unit="s"
-factor=1e9
+# axR = axL.twinx()
 
 maxcpu = 12
 cpus = numpy.linspace(1, maxcpu, maxcpu)
 
+basemode = "breath"
+baseline = numpy.average(sorted(data[data["Mode"] == basemode]["Timens"])[1:-1])
+
 def select_data(d):
-    return d["Timens"]/factor
+    return d["Timens"]
 def get_y(d):
     ys = sorted(select_data(d))[1:-1]
     y = numpy.average(ys)
@@ -28,26 +27,23 @@ def get_y(d):
     errmax = max(ys)-y
     return (y, errmin, errmax)
 
+
+ideal_x = numpy.linspace(1, maxcpu, 100)
+axL.plot(ideal_x, ideal_x, linestyle='dotted', label='Ideal speedup', color='black')
+
 seq_series=[
     ("breath", "seq_manual", "black", ","),
     # ("depth", "seq_depth", "green", ","),
     ]
 for mode, label, color, marker in seq_series:
     y, errmin, errmax = get_y(data[data["Mode"] == mode])
-    axL.errorbar(cpus,
-             [y]*maxcpu,
-             yerr=[[errmin]*maxcpu,[errmax]*maxcpu],
+    plt.plot(cpus,
+             [baseline/y]*maxcpu,
              label=label,
              color=color,
              marker=marker
              )
 
-basemode = "breath"
-baseline, _, _ = get_y(data[data["Mode"] == basemode])
-
-ideal_x = numpy.linspace(1, maxcpu, 100)
-ideal_y = baseline/ideal_x
-axL.plot(ideal_x, ideal_y, linestyle='dotted', label='Ideal time (seq/n)', color='black')
 
 par_series = [
     # ("tree", "asyncpar_tree_tmca", "blue", "--"),
@@ -55,51 +51,39 @@ par_series = [
     ("manual", "asyncpar_manual", "blue", "-"),
     ]
 for mode, label, color, linestyle in par_series:
-    d = data[data["Mode"] == mode]
-    time = list()
-    # for cpu in cpus:
-    #     time.append(select_data(d[d["CPUs"] == cpu]))
-    # axL.violinplot(positions=cpus,
-    #                dataset=time,
-    #                widths=0.1,
-    #                showmeans=True,
-    #                )    
+    d = data[data["Mode"] == mode] 
     time = list()
     yerrU = list()
     yerrL = list()
-    overhead = list()
     for cpu in cpus:
         t, errmin, errmax = get_y(d[d["CPUs"] == cpu])
-        time.append(t)
-        yerrU.append(errmin)
-        yerrL.append(errmax)
-        overhead.append(t*cpu/baseline*100-100)
-    axL.errorbar(cpus,
-                 time,
-                 yerr=(yerrL,yerrU),
-                 linestyle=linestyle,
-                 label=label, color=color)
-    axR.plot(cpus, overhead, linestyle=linestyle, label=(label+" Overhead"), color=color, marker=".")
+        time.append(baseline/t)
+        yerrU.append(0)
+        yerrL.append(0)
+    plt.plot(cpus,
+             time,
+             linestyle=linestyle,
+             label=label, color=color)
     
 plt.title('Webcrawler fetching 10k pages')
 
-plt.xlabel('Parallelism factor')
+plt.xlabel('Parallelism factor ($p$)')
 plt.xlim(1,maxcpu)
 plt.xticks(numpy.arange(1, maxcpu+1, 1))
 
 # axL.set_yscale('log')
-axL.set_ylabel('Time ('+unit+')')
-axL.set_ylim(0, None)
-lines, labels = axL.get_legend_handles_labels()
-axL.legend(lines, labels, loc='upper left', bbox_to_anchor=(0.05, 1))
+plt.ylabel('Speedup ($T_{seq}/T_p$) -- Higher is better')
+plt.ylim(0.5, maxcpu)
+plt.yticks(numpy.arange(1, maxcpu+1, 1))
+plt.legend(loc='upper left')
 
-axR.set_ylabel('Overhead relative to ideal speedup (%)')
-axR.set_ylim(0, 90)
-lines2, labels2 = axR.get_legend_handles_labels()
-axR.legend(lines2, labels2, loc='lower right', bbox_to_anchor=(0.95, 0))
+# axR.set_ylabel('Overhead relative to ideal speedup (%)')
+# axR.set_ylim(0, 90)
+# lines2, labels2 = axR.get_legend_handles_labels()
+# axR.legend(lines2, labels2, loc='lower right', bbox_to_anchor=(0.95, 0))
 
 plt.grid()
 
 plt.tight_layout()
 plt.savefig(file.replace("csv","png"))
-plt.show()
+# plt.show()

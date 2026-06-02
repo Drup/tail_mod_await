@@ -41,10 +41,10 @@ for name, color, linestyle in names:
     #              capsize=3,
     #              )
 
-plt.title('Map functions on a tree of 10000 elements on 4 CPUs')
+plt.title('Map on a tree of $N=10000$ elements on $p=4$ CPUs')
     
-plt.xlabel('Number of iterations by busy loop')
-plt.ylabel('Time per element (ns)')
+plt.xlabel('Number of iterations by busy loop ($l$)')
+plt.ylabel('Time per element ($T_p/N$) in $ns$ -- Lower is better')
 plt.legend(loc='best')
 
 plt.xscale('log')

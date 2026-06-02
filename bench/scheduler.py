@@ -45,8 +45,8 @@ x = numpy.linspace(1, top, 100)
 y = data[0][1]/x
 plt.plot(x, y, linestyle='--', label='Ideal time (100/n)', color='black')
     
-plt.xlabel('Parallelism factor')
-plt.ylabel('Time per element (ns)')
+plt.xlabel('Parallelism factor ($p$)')
+plt.ylabel('Time per element ($T_p/N$) in $ns$')
 plt.legend(loc='upper right')
 
 # plt.yscale('log')
