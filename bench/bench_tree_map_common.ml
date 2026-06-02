@@ -1,3 +1,4 @@
+let iter-limit = 100 in        (* Limit to the number of iterations *)
 open Picos
 
 type 'a tree = N of 'a * 'a tree * 'a tree | L
@@ -81,11 +82,11 @@ let rec cardinal = function
 
 let rec height = function
   | L -> 0
-  | N(_, l, r) -> 1 + max (height l) (height r)    
+  | N(_, l, r) -> 1 + max (height l) (height r)
 
 let%async rec gen_tree wmax w size =
   let n = Random.int 10 in
-  let temp_w = (!w * (100 + n))/100 in 
+  let temp_w = (!w * (100 + n))/100 in
   if temp_w >= wmax || !size <= 0 then (decr w; L)
   else begin
     decr size;
@@ -108,14 +109,14 @@ open Bechamel
 let run_benchmark file benchs =
   let instances = [ Toolkit.Instance.monotonic_clock ] in
   let cfg =
-    Benchmark.cfg ~stabilize:true ~limit:1000 ~quota:(Time.second 10.) ()
+    Benchmark.cfg ~stabilize:true ~limit:iter-limit ~quota:(Time.second 10.) ()
   in
   let raw_results =
     Benchmark.all cfg instances benchs
   in
   let ols =
     Analyze.ols ~bootstrap:0 ~r_square:true ~predictors:[| Measure.run |]
-  in  
+  in
   let results =
     List.map (fun instance -> Analyze.all ols instance raw_results) instances
   in
