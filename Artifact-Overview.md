@@ -10,14 +10,14 @@ doesn't require any knowledge to evaluate reproducability of benchmarks.
 
 See also the [Readme](Readme.md).
 
-Concretely, it implements the code transformation describe in section 4.1
-which subsumes both transformation presented in section 2 and section 3.
-The implementation is described in section 4.2.
+Concretely, it implements the code transformation from section 3
+with both extensions from section 4.
+The implementation is described in section 5.1.
 
 The artifact demonstrates:
 - The usability of the transformation (through various example and tests)
 - That it does reduce space overhead (via memory measurement). This measurements require OCaml's memprof.
-- Early performance measurements
+- Performance measurements, following the benchmark in section 5.2
 
 Current limitation of our prototype implementation:
 - OCaml's unboxed data-types are unsupported.
@@ -110,7 +110,7 @@ corner cases.
 
 ### Performance measurements
 
-This correspond to the paragraph "Time measurements" in Section 4.3.
+This correspond to the paragraph "Time measurements" in Section 5.2.
 
 Benchmarks are available in the [bench/](bench/) directory.
 The script [bench/runbench.sh](bench/runbench.sh) runs various
@@ -124,13 +124,14 @@ sh bench/runbench.sh
 These benchmarks are currently configured to run in the provided VM, with 4 cores and 4GB of RAM,
 and are expected to take about 1h30 to run. The number of parallel domains and size of the test
 cases can be adapted at the top of each `.ml` file of the different benchmarks
-
+By default, they are configured with half as many as the real benchmarks
+from the paper.
 
 After the benchmarks are done, the results can be compiled into graphs using
 [bench/processdata.sh](bench/processdata.sh), outputing three graphs:
-- `synchro.png` corresponding to figure 33,
-- `parscaling.png` corresponding to figure 34,
-- `elemscaling.png` corresponding to figure 35.
+- `synchro.png` corresponding to figure 29,
+- `elemscaling.png` corresponding to figure 30.
+- `parscaling.png` corresponding to figure 31,
 
 ```
 sh bench/processdata.sh
@@ -140,7 +141,7 @@ Full explanations of these results can be found in the paper
 
 ### Webcrawler benchmark
 
-This corresponds to paragraph 5.3.3 "A case study: the webcrawler" in Section 5.3
+This corresponds to paragraph 5.2.2 "A case study: the webcrawler" in Section 5.2
 
 The script [run_webcrawler_bench.sh](run_webcrawler_bench.sh) runs several variants of a webcrawler
 on the provided ZIM file [../wikipedia_en_top_mini_2025-12.zim](../wikipedia_en_top_mini_2025-12.zim) used for our
@@ -160,11 +161,14 @@ where:
 If ran without arguments, the script will run the necessary kiwix server (assuming the ZIM file is
 in the parent of the current directory), then run benchmarks with default values.
 
+For accurate benchmarks, it is recommended to run the crawler and kiwix-serve
+on different machines in the same local network.
+
 ### Memory measurements
 
-This correspond to the paragraph "Memory consumption" in Section 4.3.
+This correspond to the paragraph "Memory consumption" in Section 5.2.
 
-The goal of this section is to reproduce the data in Figure 32, which indicates
+The goal of this section is to reproduce the data in Figure 28, which indicates
 *memory* measurements of various runs of `map` on trees.
 
 These results are produced by running
