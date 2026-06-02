@@ -20,12 +20,12 @@ names = [
     ("map_asyncpar_width_tmca", "blue", "--"),
     ("map_asyncpar_full", "green", "-"),
     ("map_asyncpar_full_tmca", "green", "--"),
-    ]    
+    ]
 
 for name, color, linestyle in names:
     xname = "tree bench "+ name
     data = [( elt["nb"],
-              elt["time"]/10000,
+              elt["time"]/5000,
               elt["rsquare"] or 1)
             for elt in json_data if elt["name"] == xname]
     sort_data = sorted(data, key=lambda d: d[0])
@@ -41,8 +41,8 @@ for name, color, linestyle in names:
     #              capsize=3,
     #              )
 
-plt.title('Map on a tree of $N=10000$ elements on $p=4$ CPUs')
-    
+plt.title('Map on a tree of $N=5000$ elements on $p=4$ CPUs')
+
 plt.xlabel('Number of iterations by busy loop ($l$)')
 plt.ylabel('Time per element ($T_p/N$) in $ns$ -- Lower is better')
 plt.legend(loc='best')

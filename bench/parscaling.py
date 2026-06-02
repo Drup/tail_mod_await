@@ -42,8 +42,8 @@ for name, color, linestyle in names:
     xx, _, _ = zip(*sort_data)
     scaling = [ T_1/T_p for _,T_p,_ in sort_data ]
     plt.plot(xx, scaling, linestyle=linestyle, label=name, color=color)
-    
-plt.title('Map on a tree of $N=10000$ elements with a loop of $l=20000$ iterations')
+
+plt.title('Map on a tree of $N=5000$ elements with a loop of $l=10000$ iterations')
 
 plt.xlabel('Parallelism factor ($p$)')
 plt.xlim(1,top)

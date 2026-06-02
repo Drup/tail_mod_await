@@ -20,7 +20,7 @@ names = [
     ("map_asyncpar_width_tmca", "blue", "--"),
     ("map_asyncpar_full", "green", "-"),
     ("map_asyncpar_full_tmca", "green", "--"),
-    ]    
+    ]
 
 for name, color, linestyle in names:
     xname = "tree bench "+ name
@@ -36,8 +36,8 @@ for name, color, linestyle in names:
     plt.fill_between(x, ymin, ymax, color=color, alpha=0.3)
     plt.plot(x, y, linestyle=linestyle, label=name, color=color)
 
-plt.title('Map with a busy loop of l=20000 iterations on p=4 CPUs')
-    
+plt.title('Map with a busy loop of l=10000 iterations on p=4 CPUs')
+
 plt.xlabel('Number of elements ($N$)')
 plt.ylabel('Time per element ($T_p/N$) in $ns$ -- Lower is better')
 plt.legend(loc='upper right')
