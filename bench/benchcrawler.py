@@ -12,7 +12,7 @@ fig, axL = plt.subplots()
 
 # axR = axL.twinx()
 
-maxcpu = 12
+maxcpu = 4
 cpus = numpy.linspace(1, maxcpu, maxcpu)
 
 basemode = "breath"
@@ -51,7 +51,7 @@ par_series = [
     ("manual", "asyncpar_manual", "blue", "-"),
     ]
 for mode, label, color, linestyle in par_series:
-    d = data[data["Mode"] == mode] 
+    d = data[data["Mode"] == mode]
     time = list()
     yerrU = list()
     yerrL = list()
@@ -64,7 +64,7 @@ for mode, label, color, linestyle in par_series:
              time,
              linestyle=linestyle,
              label=label, color=color)
-    
+
 plt.title('Webcrawler fetching 10k pages')
 
 plt.xlabel('Parallelism factor ($p$)')

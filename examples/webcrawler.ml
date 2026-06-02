@@ -230,7 +230,7 @@ let rec fetch_page_depth g ~base ~cutoff (q: _ Stack.t) =
 
 (** Run everything *)
 
-let start s = 
+let start s =
   Format.eprintf "Launching %s@.@?" s;
   Mtime_clock.counter ()
 let stop c =
@@ -242,7 +242,7 @@ let stop c =
 
 let mode = Sys.argv.(1)
 let n_domains = int_of_string @@ Sys.argv.(2)
-let cutoff = 10000
+let cutoff = 5000
 let uri = Uri.canonicalize @@ Uri.of_string Sys.argv.(3)
 
 let size x =

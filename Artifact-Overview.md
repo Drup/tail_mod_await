@@ -39,10 +39,19 @@ For benchmarks:
 
 - jq
 - python
-- mathplotlib
+- matplotlib
 - kiwix (particularly 'kiwix-serve', usually from a 'kiwix-tools' package)
 
 ## Getting Started
+
+### VM specific instructions
+
+The sources for the artifact are available in the VM image in `~/tail_mod_await`.
+All paths are given relative to this directory, and scripts are to be run from it.
+All dependencies (system-wide as well as opam dependencies) are installed.
+The ZIM file for the webcrawler evaluation is provided in `~/wikipedia_en_top_mini_2025-12.zim`
+
+Benchmarks are configured for a 4-core machine.
 
 ### Installation from scratch
 
@@ -108,7 +117,12 @@ expect test of the following format:
 This allow to observe in a more isolated fashion the code and its transformation, along with various
 corner cases.
 
-### Performance measurements
+### Running benchmarks
+
+**Most parameters have been halved compared to the benchmarks in the paper, in order to run in a
+more timely manner on "normal" machines.**
+
+#### Performance measurements
 
 This correspond to the paragraph "Time measurements" in Section 5.2.
 
@@ -120,6 +134,9 @@ of all the functions. It is run by
 ```
 sh bench/runbench.sh
 ```
+
+**The number of elements and busy loop iterations has been halved compared to the paper, in order to
+run in a more timely manner on "normal" machine.**
 
 These benchmarks are currently configured to run in the provided VM, with 4 cores and 4GB of RAM,
 and are expected to take about 1h30 to run. The number of parallel domains and size of the test
@@ -139,9 +156,10 @@ sh bench/processdata.sh
 
 Full explanations of these results can be found in the paper
 
-### Webcrawler benchmark
+#### Webcrawler benchmark
 
-This corresponds to paragraph 5.2.2 "A case study: the webcrawler" in Section 5.2
+This corresponds to paragraph 5.2.2 "A case study: the webcrawler** in Section 5.2
+
 
 The script [run_webcrawler_bench.sh](run_webcrawler_bench.sh) runs several variants of a webcrawler
 on the provided ZIM file [../wikipedia_en_top_mini_2025-12.zim](../wikipedia_en_top_mini_2025-12.zim) used for our
@@ -161,10 +179,12 @@ where:
 If ran without arguments, the script will run the necessary kiwix server (assuming the ZIM file is
 in the parent of the current directory), then run benchmarks with default values.
 
+**This will fetch 5000 pages rather than the 10000 of the paper**
+
 For accurate benchmarks, it is recommended to run the crawler and kiwix-serve
 on different machines in the same local network.
 
-### Memory measurements
+#### Memory measurements
 
 This correspond to the paragraph "Memory consumption" in Section 5.2.
 
