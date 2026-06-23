@@ -1,4 +1,5 @@
-let iter-limit = 100 in        (* Limit to the number of iterations *)
+let iter_limit = 100        (* Limit to the number of iterations *)
+
 open Picos
 
 type 'a tree = N of 'a * 'a tree * 'a tree | L
@@ -109,7 +110,7 @@ open Bechamel
 let run_benchmark file benchs =
   let instances = [ Toolkit.Instance.monotonic_clock ] in
   let cfg =
-    Benchmark.cfg ~stabilize:true ~limit:iter-limit ~quota:(Time.second 10.) ()
+    Benchmark.cfg ~stabilize:true ~limit:iter_limit ~quota:(Time.second 10.) ()
   in
   let raw_results =
     Benchmark.all cfg instances benchs
