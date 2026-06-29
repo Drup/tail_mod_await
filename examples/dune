@@ -4,7 +4,6 @@
  (libraries picos_mux.fifo)
  (modules tree_map)
 )
-
 (test
  (name tree_map_annotated)
  (preprocess (pps ppx_tmaa ppx_deriving.show ppx_deriving.eq))
@@ -27,6 +26,13 @@
  (libraries picos_mux.fifo mtime.clock
  )
  (modules read_files_icfp)
+)
+(executable
+ (name string_patch)
+ (preprocess (pps ppx_tmaa ppx_deriving.eq ppx_deriving.show))
+ (libraries picos_mux.fifo mtime.clock
+ )
+ (modules string_distance)
 )
 
 (executable
