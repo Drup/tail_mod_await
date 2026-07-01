@@ -37,8 +37,8 @@ For memory benchmark: Need Linux.
 
 For benchmarks:
 
-- jq
-- python
+- jq >= 1.6
+- python3
 - matplotlib
 - kiwix (particularly 'kiwix-serve', usually from a 'kiwix-tools' package)
 
