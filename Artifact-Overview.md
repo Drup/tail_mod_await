@@ -166,10 +166,10 @@ on the provided ZIM file [../wikipedia_en_top_mini_2025-12.zim](../wikipedia_en_
 evaluation. The script is to be ran from the present directory and accepts the following arguments:
 
 ```
-sh run_webcrwaler_bench.sh <number of cpus> <repeats> <server address>
+bash run_webcrawler_bench.sh [<number of cpus>] [<repeats>] [<server address>]
 ```
 
-where:
+All the arguments are optional. They are:
 - `<number of cpus>` denotes the maximum number of parallel domains for the parallel webcrawler
   (default 4)
 - `<repeats>` the number of repeats per run (default 2)
