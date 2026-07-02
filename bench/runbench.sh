@@ -4,8 +4,6 @@ echo "System Information"
 
 hostname
 
-lscpu
-
 echo "Building"
 
 dune build ./bench/bench_synchro.exe
