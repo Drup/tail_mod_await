@@ -30,9 +30,9 @@
 (executable
  (name string_patch)
  (preprocess (pps ppx_tmaa ppx_deriving.eq ppx_deriving.show))
- (libraries picos_mux.fifo mtime.clock
+ (libraries picos_mux.fifo mtime.clock threads.posix moonpool
  )
- (modules string_distance)
+ (modules string_patch)
 )
 
 (executable
