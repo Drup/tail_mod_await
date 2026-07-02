@@ -10,7 +10,7 @@ dune build $BIN
 # Launch kiwix with:
 # kiwix-serve -p 8080 tmaa/wikipedia_en_top_mini_2025-12.zim
 
-URL="http://$HOST:8080/content/wikipedia_en_top_mini_2025-12/Functional_programming"
+URL="http://$HOST:8080/wikipedia_en_top_mini_2025-12/Functional_programming"
 
 OUT=webcrawler.csv
 

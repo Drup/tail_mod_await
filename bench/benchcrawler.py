@@ -6,7 +6,7 @@ file = sys.argv[1]
 
 # Load JSON data from a file
 print("file", file)
-data = numpy.genfromtxt(file, delimiter=",", names=True, dtype=None)
+data = numpy.genfromtxt(file, delimiter=",", names=True, encoding=None, dtype=None)
 
 fig, axL = plt.subplots()
 
