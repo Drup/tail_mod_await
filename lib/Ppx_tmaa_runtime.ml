@@ -13,10 +13,6 @@ module Loc = struct
   type 'a list =
     | [] : unit list
     | (::) : 'h t * 'h2 list -> ('h * 'h2) list
-  
-  let rec length : type a . a list -> int = function
-    | [] -> 0
-    | _ :: t -> length t + 1
 
   let mk block offset =
     let pointer = Obj.repr block in
@@ -47,33 +43,32 @@ module Loc = struct
 end
 
 
-type counter = int Atomic.t
+(** Termination monitor which leverages the GC *)
+module Monitor = struct
+
+  type t = { parents : t Saturn.Bag.t } [@@ocaml.unbox]
+
+  let attach m ~parent =
+    Saturn.Bag.push m.parents parent
+
+  let root resolve =
+    let parents = Saturn.Bag.create () in
+    Gc.finalise (fun _ -> resolve ()) parents;
+    { parents }
+
+  let node parent =
+    let parents = Saturn.Bag.create () in
+    Saturn.Bag.push parents parent;
+    { parents }
+end
+  
+type 'a status =
+  | ToFill of {hole : 'a Loc.t; monitor: Monitor.t; aliases: 'a destiny list}
+  | Filled of 'a
 
 and 'h destiny = {
-  hole : 'h Loc.t;
-  awaitable : awaitable;
-  callback : 'h destiny_callback Atomic.t ;
-}
-
-and 'a destiny_callback =
-  | Filled of 'a
-  | ToFill of 'a Loc.t list
-
-and awaitable = {
-  nb : counter ;
-  resolve : unit -> unit ;
-}
-
-let awaitable_try_resolve r =
-  if Atomic.compare_and_set r.nb 0 (-1) then
-    r.resolve ()
-
-let awaitable_update r n =
-  assert (n >= -1);
-  let oldv = Atomic.fetch_and_add r.nb n in
-  let newv = oldv + n in
-  assert (newv >= 0);
-  ()
+  status : 'h status Atomic.t ;
+} [@@ocaml.unbox]
 
 module Destiny = struct
 
@@ -85,63 +80,51 @@ module Destiny = struct
     | [] : unit list
     | (::) : 'h t * 'h2 list -> ('h * 'h2) list
 
-  let create_root ~awaitable ~hole =
-    { awaitable; callback = Atomic.make (ToFill []); hole }
-    
-  let create_from ~hole d =
-    { awaitable=d.awaitable;
-      callback = Atomic.make (ToFill []); hole ;
-    }
-  
+  let create ~monitor ~hole =
+    { status = Atomic.make (ToFill {hole; aliases=[]; monitor})  }
+
+  let get_monitor dest =
+    match Atomic.get dest.status with
+    | Filled _ -> assert false
+    | ToFill {monitor;_} -> monitor
+
   let rec subdestinies
     : type a. _ t -> a Loc.list -> a list
-    = fun d -> function
+    = fun parent -> function
       | [] -> []
       | hole :: t ->
-        let d' = create_from ~hole d in
-        d' :: subdestinies d t
-
-  let decr d =
-    awaitable_update d.awaitable (-1);
-    awaitable_try_resolve d.awaitable
-    
-  let incr d n =
-    awaitable_update d.awaitable n
+        let monitor = Monitor.node (get_monitor parent) in
+        let d' = create ~monitor ~hole in
+        d' :: subdestinies parent t
 
   (* Actual destiny functions. *)
 
-  let set d v =
-    let oldv = Atomic.exchange d.callback (Filled v) in
+  let rec set d v =
+    let oldv = Atomic.exchange d.status (Filled v) in
     match oldv with
     | Filled v' -> assert (v == v')
-    | ToFill l ->
+    | ToFill {hole; aliases; _} ->
+      Loc.set hole v;
       List.iter
-        (fun h -> Loc.set h (Sys.opaque_identity v))
-        (d.hole :: l)
+        (fun h -> set h (Sys.opaque_identity v))
+        aliases;
+      Gc.full_major ()
 
-  let rec copy ~orig hole =
-    let c = Atomic.get orig.callback in
+  let rec alias ~original d =
+    let c = Atomic.get original.status in
     match c with
-    | Filled v -> Loc.set hole v
-    | ToFill l ->
-      if Atomic.compare_and_set orig.callback c (ToFill (hole :: l)) then
-        ()
+    | Filled v -> set d v
+    | ToFill {hole; monitor; aliases} ->
+      let new_status = ToFill {hole; monitor; aliases = d :: aliases} in
+      if Atomic.compare_and_set original.status c new_status then
+        Monitor.attach monitor ~parent:(get_monitor d)
       else
-        copy ~orig hole
+        alias ~original d
 
   let refine (type a) d v (hs : a Loc.list) : a list =
+    let subs = subdestinies d hs in
     set d v;
-    match hs with
-    | [] ->
-      decr d;
-      []
-    | [ hole ] ->
-      (* Only one hole. No need to update counter. *)
-      [create_from d ~hole]
-    | _ -> 
-      let locs = Loc.length hs in
-      incr d (locs - 1);
-      subdestinies d hs
+    subs
     
   let fill d v =
     let [] = refine d v [] in ()
@@ -152,23 +135,19 @@ module Destiny = struct
     P.Fiber.spawn fiber (fun _ ->
         let v = P.Computation.await c in
         set d v;
-        decr d;
         ()
       )
 
   (* Awaitable initialisation *)
   let mk () = 
-    let nb = Atomic.make_contended 1 in
-
     let computation = P.Computation.create () in
     let value : 'a ref = ref (Loc.dummy ()) in
     let hole : 'a Loc.t = Loc.mk value 0 in
     let resolve () =
       P.Computation.return computation (Loc.get hole)
     in
-
-    let awaitable = { nb ; resolve } in
-    let d = create_root ~hole ~awaitable in
+    let monitor = Monitor.root resolve in
+    let d = create ~monitor ~hole in
     d, computation
 end
 
@@ -191,11 +170,10 @@ module Memo = struct
     | Added ->
       (* It wasn't seen, we have the lock. We can execute f *)
       f key
-    | Found orig ->
+    | Found original ->
       (* It was seen. We can register the link *)
-      Destiny.copy ~orig d.hole;
-      assert (orig.awaitable == d.awaitable);
-      Destiny.decr d;
+      Destiny.alias ~original d;
+      (* assert (original.status == d.status); *)
       ()
 
 end
