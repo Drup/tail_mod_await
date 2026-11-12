@@ -93,19 +93,15 @@ module AsyncFun = struct
 
 end
 
-type 'a status =
-  | Unaliased of {hole : 'a Loc.t; monitor: Monitor.t}
-  | Aliasable of {holes : 'a Loc.t list; monitor: Monitor.t}
-  | Alias
-  | Filled of 'a
-
-and 'a destiny = {
-  status : 'a status Atomic.t ;
-} [@@ocaml.unbox]
-
 module Destiny = struct
 
-  type 'h t = 'h destiny
+  type 'a status =
+    | Unaliased of {hole : 'a Loc.t; monitor: Monitor.t}
+    | Aliasable of {holes : 'a Loc.t list; monitor: Monitor.t}
+    | Alias
+    | Filled of 'a
+
+  type 'a t = 'a status Atomic.t
 
   (* Polymorphic map for getting subholes in a destiny *)
   
@@ -114,10 +110,10 @@ module Destiny = struct
     | (::) : 'h t * 'h2 list -> ('h * 'h2) list
 
   let create ~monitor ~hole =
-    { status = Atomic.make (Unaliased {hole; monitor})  }
+    Atomic.make (Unaliased {hole; monitor})
 
   let get_monitor dest =
-    match Atomic.get dest.status with
+    match Atomic.get dest with
     | Filled _ -> assert false
     | Aliasable {monitor; _} -> monitor
     | Unaliased {monitor; _} -> monitor
@@ -135,7 +131,7 @@ module Destiny = struct
   (* Actual destiny functions. *)
 
   let set d v =
-    let oldv = Atomic.exchange d.status (Filled v) in
+    let oldv = Atomic.exchange d (Filled v) in
     match oldv with
     | Filled v' -> assert (v == v')
     | Alias -> assert false
@@ -147,7 +143,7 @@ module Destiny = struct
       Loc.set hole (Sys.opaque_identity v)
 
   (* A direct fill.
-     Since the numer of hole strictly decreases, we request termination check. *)
+     This might fill the last hole, so we request termination check. *)
   let fill d v =
     set d v;
     AsyncFun.request_gc ()
@@ -156,7 +152,7 @@ module Destiny = struct
     match hs with
     | [] -> fill d v; []
     | [ hole ] ->
-      (* No need to change monitor for direct edges. *)
+      (* No need to change monitor for single edges. *)
       let d' = create ~monitor:(get_monitor d) ~hole in
       set d v;
       [ d' ]
@@ -166,7 +162,7 @@ module Destiny = struct
       subs
   
   let update_alias d =
-    let oldst = Atomic.exchange d.status Alias in
+    let oldst = Atomic.exchange d Alias in
     match oldst with
     | Unaliased {hole; monitor} -> hole, monitor
     | _ -> assert false
@@ -174,19 +170,19 @@ module Destiny = struct
   let rec alias ~original d =
     (* [alias d] is only possible if [d] us [Unaliased]. *)
     let dhole, dmonitor = update_alias d in
-    let c = Atomic.get original.status in
+    let c = Atomic.get original in
     match c with
-    | Filled v -> set d v
+    | Filled v -> fill d v
     | Alias -> assert false
     | Unaliased {hole; monitor} ->
       let new_status = Aliasable {holes = [hole; dhole]; monitor} in
-      if Atomic.compare_and_set original.status c new_status then
+      if Atomic.compare_and_set original c new_status then
         Monitor.attach monitor ~parent:dmonitor
       else
         alias ~original d
     | Aliasable {holes; monitor} ->
       let new_status = Aliasable {holes = dhole :: holes; monitor} in
-      if Atomic.compare_and_set original.status c new_status then
+      if Atomic.compare_and_set original c new_status then
         Monitor.attach monitor ~parent:dmonitor
       else
         alias ~original d
@@ -197,7 +193,7 @@ module Destiny = struct
     let fiber = P.Fiber.create ~forbid:false c in
     P.Fiber.spawn fiber (fun _ ->
         let v = P.Computation.await c in
-        set d v;
+        fill d v;
         ()
       )
 
@@ -236,7 +232,6 @@ module Memo = struct
     | Found original ->
       (* It was seen. We can register the alias *)
       Destiny.alias ~original d;
-      (* assert (original.status == d.status); *)
       ()
 
 end
