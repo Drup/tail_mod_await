@@ -124,13 +124,13 @@ module Destiny = struct
     | Alias -> assert false
 
   let rec subdestinies
-    : type a. _ t -> a Loc.list -> a list
-    = fun parent -> function
+    : type a. parent:Monitor.t -> a Loc.list -> a list
+    = fun ~parent -> function
       | [] -> []
       | hole :: t ->
-        let monitor = Monitor.node (get_monitor parent) in
+        let monitor = Monitor.node parent in
         let d' = create ~monitor ~hole in
-        d' :: subdestinies parent t
+        d' :: subdestinies ~parent t
 
   (* Actual destiny functions. *)
 
@@ -146,6 +146,25 @@ module Destiny = struct
     | Unaliased {hole; _} ->
       Loc.set hole (Sys.opaque_identity v)
 
+  (* A direct fill.
+     Since the numer of hole strictly decreases, we may check termination. *)
+  let fill d v =
+    set d v;
+    AsyncFun.request_gc ()
+
+  let refine (type a) d v (hs : a Loc.list) : a list =
+    match hs with
+    | [] -> fill d v; []
+    | [ hole ] ->
+      (* No need to change monitor for direct edges. *)
+      let d' = create ~monitor:(get_monitor d) ~hole in
+      set d v;
+      [ d' ]
+    | _ ->
+      let subs = subdestinies ~parent:(get_monitor d) hs in
+      set d v;
+      subs
+  
   let update_alias d =
     let oldst = Atomic.exchange d.status Alias in
     match oldst with
@@ -172,14 +191,6 @@ module Destiny = struct
       else
         alias ~original d
 
-  let refine (type a) d v (hs : a Loc.list) : a list =
-    let subs = subdestinies d hs in
-    set d v;
-    subs
-    
-  let fill d v =
-    let [] = refine d v [] in ();
-    AsyncFun.request_gc ()
 
   let chain (c : 'a P.Computation.t) d =
     (* TODO: Improve efficiency with scheduler support *)
