@@ -61,7 +61,38 @@ module Monitor = struct
     Saturn.Bag.push parents parent;
     { parents }
 end
+
+module AsyncFun = struct
+
+  let async f =
+    let c = P.Computation.create () in
+    let fiber = P.Fiber.create ~forbid:false c in
+    P.Fiber.spawn fiber (fun _ -> P.Computation.return c @@ f());
+    c
   
+  let fork f =
+    let c = P.Computation.create () in
+    let fiber = P.Fiber.create ~forbid:false c in
+    P.Fiber.spawn fiber (fun _ -> f(); P.Computation.finish c)
+
+
+  (* A fiber requesting the scheduler to trigger a major collection.
+     There should always be only one such fiber.
+  *)  
+  type gc_request = Sleeping | Scheduled
+  let gc_request_status = Atomic.make Sleeping
+  let request_gc () =
+    let oldv = Atomic.exchange gc_request_status Scheduled in
+    match oldv with
+    | Scheduled -> () (* The fiber was already created *)
+    | Sleeping ->
+      fork (fun _ ->
+          Gc.full_major ();
+          Atomic.set gc_request_status Sleeping
+        )
+
+end
+
 type 'a status =
   | Unaliased of {hole : 'a Loc.t; monitor: Monitor.t}
   | Aliasable of {holes : 'a Loc.t list; monitor: Monitor.t}
@@ -147,7 +178,8 @@ module Destiny = struct
     subs
     
   let fill d v =
-    let [] = refine d v [] in ()
+    let [] = refine d v [] in ();
+    AsyncFun.request_gc ()
 
   let chain (c : 'a P.Computation.t) d =
     (* TODO: Improve efficiency with scheduler support *)
@@ -199,21 +231,6 @@ module Memo = struct
 end
 
 
-
-module AsyncFun = struct
-
-  let async f =
-    let c = P.Computation.create () in
-    let fiber = P.Fiber.create ~forbid:false c in
-    P.Fiber.spawn fiber (fun _ -> P.Computation.return c @@ f());
-    c
-  
-  let fork f =
-    let c = P.Computation.create () in
-    let fiber = P.Fiber.create ~forbid:false c in
-    P.Fiber.spawn fiber (fun _ -> f(); P.Computation.finish c)
-
-end
 
   
 
