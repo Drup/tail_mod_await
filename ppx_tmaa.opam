@@ -20,8 +20,6 @@ depends: [
   "bechamel-js" {with-test}
   "memtrace" {with-test}
   "moonpool" {with-test}
-  "ezcurl" {with-test}
-  "lambdasoup" {with-test}
   "odoc" {with-doc}
 ]
 build: [
