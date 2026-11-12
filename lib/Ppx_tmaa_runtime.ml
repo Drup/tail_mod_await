@@ -147,7 +147,7 @@ module Destiny = struct
       Loc.set hole (Sys.opaque_identity v)
 
   (* A direct fill.
-     Since the numer of hole strictly decreases, we may check termination. *)
+     Since the numer of hole strictly decreases, we request termination check. *)
   let fill d v =
     set d v;
     AsyncFun.request_gc ()
@@ -234,7 +234,7 @@ module Memo = struct
       (* It wasn't seen, we have the lock. We can execute f *)
       f key
     | Found original ->
-      (* It was seen. We can register the link *)
+      (* It was seen. We can register the alias *)
       Destiny.alias ~original d;
       (* assert (original.status == d.status); *)
       ()
