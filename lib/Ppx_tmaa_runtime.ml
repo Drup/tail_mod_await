@@ -46,19 +46,19 @@ end
 (** Termination monitor which leverages the GC *)
 module Monitor = struct
 
-  type t = { parents : t Saturn.Bag.t } [@@ocaml.unbox]
+  type t = { parents : t Saturn.Stack.t } [@@ocaml.unbox]
 
   let attach m ~parent =
-    Saturn.Bag.push m.parents parent
+    Saturn.Stack.push m.parents parent
 
   let root resolve =
-    let parents = Saturn.Bag.create () in
+    let parents = Saturn.Stack.create () in
     Gc.finalise (fun _ -> resolve ()) parents;
     { parents }
 
   let node parent =
-    let parents = Saturn.Bag.create () in
-    Saturn.Bag.push parents parent;
+    let parents = Saturn.Stack.create () in
+    Saturn.Stack.push parents parent;
     { parents }
 end
 
