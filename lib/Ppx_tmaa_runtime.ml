@@ -63,11 +63,13 @@ module Monitor = struct
 end
   
 type 'a status =
-  | ToFill of {hole : 'a Loc.t; monitor: Monitor.t; aliases: 'a destiny list}
+  | Unaliased of {hole : 'a Loc.t; monitor: Monitor.t}
+  | Aliasable of {holes : 'a Loc.t list; monitor: Monitor.t}
+  | Alias
   | Filled of 'a
 
-and 'h destiny = {
-  status : 'h status Atomic.t ;
+and 'a destiny = {
+  status : 'a status Atomic.t ;
 } [@@ocaml.unbox]
 
 module Destiny = struct
@@ -81,12 +83,14 @@ module Destiny = struct
     | (::) : 'h t * 'h2 list -> ('h * 'h2) list
 
   let create ~monitor ~hole =
-    { status = Atomic.make (ToFill {hole; aliases=[]; monitor})  }
+    { status = Atomic.make (Unaliased {hole; monitor})  }
 
   let get_monitor dest =
     match Atomic.get dest.status with
     | Filled _ -> assert false
-    | ToFill {monitor;_} -> monitor
+    | Aliasable {monitor; _} -> monitor
+    | Unaliased {monitor; _} -> monitor
+    | Alias -> assert false
 
   let rec subdestinies
     : type a. _ t -> a Loc.list -> a list
@@ -99,25 +103,41 @@ module Destiny = struct
 
   (* Actual destiny functions. *)
 
-  let rec set d v =
+  let set d v =
     let oldv = Atomic.exchange d.status (Filled v) in
     match oldv with
     | Filled v' -> assert (v == v')
-    | ToFill {hole; aliases; _} ->
-      Loc.set hole v;
+    | Alias -> assert false
+    | Aliasable {holes; _} ->
       List.iter
-        (fun h -> set h (Sys.opaque_identity v))
-        aliases;
-      Gc.full_major ()
+        (fun hole -> Loc.set hole (Sys.opaque_identity v))
+        holes
+    | Unaliased {hole; _} ->
+      Loc.set hole (Sys.opaque_identity v)
 
+  let update_alias d =
+    let oldst = Atomic.exchange d.status Alias in
+    match oldst with
+    | Unaliased {hole; monitor} -> hole, monitor
+    | _ -> assert false
+  
   let rec alias ~original d =
+    (* [alias d] is only possible if [d] us [Unaliased]. *)
+    let dhole, dmonitor = update_alias d in
     let c = Atomic.get original.status in
     match c with
     | Filled v -> set d v
-    | ToFill {hole; monitor; aliases} ->
-      let new_status = ToFill {hole; monitor; aliases = d :: aliases} in
+    | Alias -> assert false
+    | Unaliased {hole; monitor} ->
+      let new_status = Aliasable {holes = [hole; dhole]; monitor} in
       if Atomic.compare_and_set original.status c new_status then
-        Monitor.attach monitor ~parent:(get_monitor d)
+        Monitor.attach monitor ~parent:dmonitor
+      else
+        alias ~original d
+    | Aliasable {holes; monitor} ->
+      let new_status = Aliasable {holes = dhole :: holes; monitor} in
+      if Atomic.compare_and_set original.status c new_status then
+        Monitor.attach monitor ~parent:dmonitor
       else
         alias ~original d
 
